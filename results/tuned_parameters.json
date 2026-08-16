@@ -1,0 +1,35 @@
+{
+  "held_out_definition": "final day of Alibaba 2018 10-second aggregate trace",
+  "validation_definition": "penultimate day of the same trace",
+  "segment_length_observations": 120,
+  "segment_length_seconds": 1200,
+  "load_boundaries": {
+    "low_upper": 0.409795192552798,
+    "medium_upper": 0.4257477731877659
+  },
+  "kalman": {
+    "cpu_util_percent": {
+      "q": 0.01,
+      "r": 0.0001
+    },
+    "net_in": {
+      "q": 0.0001,
+      "r": 0.0001
+    },
+    "net_out": {
+      "q": 0.01,
+      "r": 0.01
+    }
+  },
+  "ema": {
+    "cpu_util_percent": {
+      "alpha": 0.8
+    },
+    "net_in": {
+      "alpha": 0.8
+    },
+    "net_out": {
+      "alpha": 0.6
+    }
+  }
+}

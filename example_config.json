@@ -1,0 +1,26 @@
+{
+  "note": "Illustrative values only. The paper does not disclose the exact evaluated values for these parameters.",
+  "scheduler": {
+    "latency_weight": 0.25,
+    "energy_weight": 0.25,
+    "cost_weight": 0.25,
+    "accuracy_weight": 0.25,
+    "minimum_bandwidth_bps": 1000000.0,
+    "minimum_lhs": 0.5,
+    "minimum_battery_fraction": 0.1,
+    "reference_uplink_bps": 10000000.0,
+    "reference_downlink_bps": 20000000.0,
+    "reference_uplink_latency_s": 0.05,
+    "reference_downlink_latency_s": 0.05,
+    "device_tx_power_w": 1.3,
+    "device_rx_power_w": 0.9
+  },
+  "benchmark": {
+    "signals": ["cpu_util_percent", "net_in", "net_out"],
+    "segment_length": 120,
+    "epsilon": 1e-6,
+    "kalman_q_grid": [1e-6, 1e-5, 0.0001, 0.001, 0.01],
+    "kalman_r_grid": [0.0001, 0.001, 0.01, 0.1],
+    "ema_alpha_grid": [0.05, 0.1, 0.2, 0.4, 0.6, 0.8]
+  }
+}

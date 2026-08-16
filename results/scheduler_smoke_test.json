@@ -1,0 +1,58 @@
+{
+  "task_id": "trace-mapped-example",
+  "selected_venue": "fog-1",
+  "rejected": false,
+  "evaluations": [
+    {
+      "venue": "device",
+      "kind": "local",
+      "feasible": false,
+      "reasons": [
+        "accuracy_below_minimum",
+        "deadline_miss_predicted"
+      ],
+      "latency_s": 1.6,
+      "queue_s": 0.0,
+      "communication_s": 0.0,
+      "compute_s": 1.6,
+      "system_energy_j": 0.2,
+      "device_energy_j": 0.2,
+      "monetary_cost": 0.0,
+      "accuracy": 0.82,
+      "lhs": null,
+      "objective": null
+    },
+    {
+      "venue": "fog-1",
+      "kind": "fog",
+      "feasible": true,
+      "reasons": [],
+      "latency_s": 0.26566666666666666,
+      "queue_s": 0.05,
+      "communication_s": 0.08233333333333333,
+      "compute_s": 0.13333333333333333,
+      "system_energy_j": 0.1116,
+      "device_energy_j": 0.0828,
+      "monetary_cost": 0.016,
+      "accuracy": 0.91,
+      "lhs": 0.9110102945904932,
+      "objective": 0.6380208333333333
+    },
+    {
+      "venue": "cloud",
+      "kind": "cloud",
+      "feasible": true,
+      "reasons": [],
+      "latency_s": 0.2416,
+      "queue_s": 0.05,
+      "communication_s": 0.15159999999999998,
+      "compute_s": 0.04,
+      "system_energy_j": 0.0848,
+      "device_energy_j": 0.0528,
+      "monetary_cost": 0.032,
+      "accuracy": 0.96,
+      "lhs": null,
+      "objective": 0.6673167298516389
+    }
+  ]
+}

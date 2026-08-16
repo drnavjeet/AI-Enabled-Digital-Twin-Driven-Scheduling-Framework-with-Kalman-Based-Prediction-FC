@@ -1,0 +1,34 @@
+section,load,metric,reported_or_claimed,recomputed,status,severity,evidence_needed
+Table IV point-estimate claim,low,mean_latency,15.4,15.4388,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,low,p95_latency,14.4,14.3621,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,low,dmr,23.5,23.4772,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,low,throughput,4.4,4.4255,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,low,energy,2.9,2.9248,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,low,cost_index,17.0,17.0,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,medium,mean_latency,14.1,14.0781,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,medium,p95_latency,16.6,16.6152,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,medium,dmr,57.1,57.0883,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,medium,throughput,5.1,5.0957,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,medium,energy,13.1,13.0546,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,medium,cost_index,21.3,21.3115,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,high,mean_latency,24.0,23.9725,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,high,p95_latency,26.6,26.5565,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,high,dmr,79.5,79.5493,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,high,throughput,6.2,6.2063,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,high,energy,9.3,9.3052,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV point-estimate claim,high,cost_index,19.2,19.2053,verified_arithmetic,low,Run-level records are still required to validate the underlying point estimates and uncertainty.
+Table IV/XI,all,95% confidence intervals,mean +/- 95% CI,not possible,missing_from_table,high,Per-seed KPI records for every scheduler and load.
+Table IV/XI,medium/high,Cost J (normalized),> 1,not possible,definition_conflicts_with_equation_27,high,"Aggregation window, denominator, objective weights, and separate monetary cost."
+Table IV,all,Jain fairness baselines,recompute,not possible,raw_counts_missing,medium,Completed-task count per fog node and per seed.
+Equation 14,all,communication time units,bytes / bits-per-second,requires 8 * bytes / bits-per-second,unit_error_in_equation,high,Confirm whether simulator bandwidth is bits/s or bytes/s; use one convention everywhere.
+Table V/XII,high,duplicated table conflict,Table V says recompute; Table XII prints invalid values,not possible,internally_contradictory_results,high,Delete or regenerate Table XII from the same verified run-level records used for Table V.
+Table V/XII,high,DT-KF RMSE,220,not possible,corrupted_value,high,High-load ground truth and one-step prediction records.
+Table V/XII,high,DT-OPT MAE,0.0083,not possible,anomalous_value,high,High-load ground truth and DT-OPT prediction records.
+Table V/XII,high,DT-OPT RMSE/MAPE,duplicates SemiGreedy exactly,not possible,probable_copy_error,high,Raw predictions for both algorithms.
+Table V/XII,all,predictor identity,scheduler names used as prediction baselines,not applicable,methodology_ambiguous,high,"Define the predictor attached to DT-OPT, SemiGreedy, and Fog-only, or relabel rows as Kalman/EMA/last-value."
+Table V low/medium arithmetic,low,mae_reduction_vs_fog_only,47.9-48.2% MAE; 50.5-54.7% RMSE; 45.2-49.0% MAPE,47.8697,verified_arithmetic_only,low,Raw records are required to validate the displayed means and +/- terms.
+Table V low/medium arithmetic,low,rmse_reduction_vs_fog_only,47.9-48.2% MAE; 50.5-54.7% RMSE; 45.2-49.0% MAPE,54.6793,verified_arithmetic_only,low,Raw records are required to validate the displayed means and +/- terms.
+Table V low/medium arithmetic,low,mape_reduction_vs_fog_only,47.9-48.2% MAE; 50.5-54.7% RMSE; 45.2-49.0% MAPE,45.2381,verified_arithmetic_only,low,Raw records are required to validate the displayed means and +/- terms.
+Table V low/medium arithmetic,medium,mae_reduction_vs_fog_only,47.9-48.2% MAE; 50.5-54.7% RMSE; 45.2-49.0% MAPE,48.2155,verified_arithmetic_only,low,Raw records are required to validate the displayed means and +/- terms.
+Table V low/medium arithmetic,medium,rmse_reduction_vs_fog_only,47.9-48.2% MAE; 50.5-54.7% RMSE; 45.2-49.0% MAPE,50.5285,verified_arithmetic_only,low,Raw records are required to validate the displayed means and +/- terms.
+Table V low/medium arithmetic,medium,mape_reduction_vs_fog_only,47.9-48.2% MAE; 50.5-54.7% RMSE; 45.2-49.0% MAPE,48.9804,verified_arithmetic_only,low,Raw records are required to validate the displayed means and +/- terms.

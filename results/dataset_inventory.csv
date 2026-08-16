@@ -1,0 +1,6 @@
+input,source,availability,version,records,detail
+Dataset A,BuptMecMigration/Edge-Computing-Dataset,downloaded_public_repository,04e664fab9cdb2a58d04ebc615cd74405e6062e2,482687,93 CSV files; no header; 22 documented fields
+Dataset B,PhuLai/eua-dataset,downloaded_public_repository,61238e00a6f01019c8a6ba1619675337a879a3d4,816,Melbourne CBD users; 125 Optus server sites
+Dataset C,DataCenter-Traces-Datasets / Alibaba 2018,downloaded_public_repository_and_pypi_package_available,003bb8e7ce9aaf4ed16ddf1652bc1a279c8ac2e6,67242,"10-second aggregate CPU, memory, network-in/out, and disk utilization; 1878 fewer rows than a complete eight-day series"
+Dataset D,Held-out final day of Dataset C (this independent benchmark),derived_locally,003bb8e7ce9aaf4ed16ddf1652bc1a279c8ac2e6,8640,Explicit choice made here; the paper does not identify its Dataset D
+Simulator,iFogSim2 local checkout,available_locally,unknown,446,Java source files in the existing local project
