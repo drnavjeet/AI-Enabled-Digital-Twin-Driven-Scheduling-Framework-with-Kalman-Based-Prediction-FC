@@ -19,6 +19,10 @@ It does **not** claim to reproduce the paper's exact Tables IV/V or XI/XII. The 
 - `example_config.json`: explicit illustrative scheduler values and benchmark grids. These are not represented as the paper's hidden settings.
 - `tests/test_dt_kf.py`: unit and unit-convention checks.
 - `results/`: generated CSV, JSON, and Markdown outputs.
+- `experiment.py`: event-driven paired-seed simulator with EDF/FCFS dispatch, admission control, node accounting, and aligned prediction logging.
+- `run_independent_experiments.py`: main, ablation, sensitivity, scalability, confidence-interval, paired-test, and effect-size calculations.
+- `validate_independent_results.py`: independent reconciliation of reported KPIs against raw task, node, and prediction records.
+- `results/independent_experiment/`: complete rerun outputs, including compressed raw records and publication-ready LaTeX tables.
 
 ## Run
 
@@ -28,7 +32,29 @@ From this directory:
 $python = 'C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
 & $python -m unittest discover -s tests -v
 & $python recompute.py
+& $python run_independent_experiments.py
+& $python validate_independent_results.py
 ```
+
+For a quick pipeline smoke test, use `run_independent_experiments.py --quick`. The
+full command runs 1,200 algorithm-seed scenarios and writes checkpoints as each
+experiment family completes.
+
+## Independent rerun
+
+The independent experiment uses 30 paired seeds for the three-load main comparison,
+20 paired seeds for ablation and sensitivity, and 10 paired seeds per scalability
+configuration. Rejected tasks count as deadline misses, Jain fairness is computed
+from per-node completed-task counts, and prediction errors use one-step-ahead aligned
+ground truth and predictions.
+
+The generated report is
+`results/independent_experiment/independent_results_report.md`. It includes all nine
+baseline Jain-fairness values, all high-load prediction cells, Student-t 95% CIs,
+paired tests with Holm correction, effect sizes with bootstrap CIs, and the complete
+ablation, sensitivity, and scalability tables. These values are new reproducible
+simulation results; they are not presented as recovered values from undocumented
+original runs.
 
 The default data location is:
 

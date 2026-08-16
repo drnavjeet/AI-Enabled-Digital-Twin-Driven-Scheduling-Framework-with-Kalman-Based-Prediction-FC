@@ -1,0 +1,9 @@
+{
+  "status": "pass",
+  "failures": [],
+  "validated_files": 16,
+  "main_runs": 360,
+  "raw_task_records": 356852,
+  "raw_prediction_records": 40320,
+  "paired_comparisons": 72
+}

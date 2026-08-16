@@ -1,0 +1,610 @@
+{
+  "generated_at_utc": "2026-08-16T15:35:11.446413+00:00",
+  "status": "full_independent_rerun",
+  "provenance": "Independent trace-backed experiment. Not a reconstruction of the manuscript's undocumented original simulator runs.",
+  "data_root": "C:\\Users\\Dell\\Documents\\Codex\\2026-08-16\\im\\work\\data_sources",
+  "config": {
+    "warmup_s": 20.0,
+    "measurement_s": 90.0,
+    "telemetry_step_s": 1.0,
+    "main_seeds": 30,
+    "secondary_seeds": 20,
+    "scalability_seeds": 10,
+    "fog_nodes": 8,
+    "arrival_rates": [
+      [
+        "low",
+        5.0
+      ],
+      [
+        "medium",
+        10.0
+      ],
+      [
+        "high",
+        18.0
+      ]
+    ],
+    "load_centers": [
+      [
+        "low",
+        0.25
+      ],
+      [
+        "medium",
+        0.5
+      ],
+      [
+        "high",
+        0.75
+      ]
+    ],
+    "kalman_q": 0.001,
+    "kalman_r": 0.01,
+    "ema_alpha": 0.12,
+    "mape_epsilon": 1e-06
+  },
+  "main_algorithms": [
+    {
+      "name": "DT-KF-CostAware",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "DT-OPT",
+      "predictor": "ema",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "SemiGreedy",
+      "predictor": "last",
+      "policy": "latency",
+      "use_dt_state": true,
+      "use_lhs": false,
+      "admission": false,
+      "queue_mode": "fcfs",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "Fog-only",
+      "predictor": "mean",
+      "policy": "nearest_fog",
+      "use_dt_state": true,
+      "use_lhs": false,
+      "admission": false,
+      "queue_mode": "fcfs",
+      "allowed_kinds": [
+        "fog"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  ],
+  "ablation_algorithms": [
+    {
+      "name": "Full",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "No-Kalman",
+      "predictor": "last",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "No-DT-state",
+      "predictor": "mean",
+      "policy": "cost",
+      "use_dt_state": false,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "none",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "No-LHS",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": false,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.0,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "No-cost",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.0,
+        0.3333333333333333
+      ]
+    },
+    {
+      "name": "No-admission",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": false,
+      "admission": false,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.0,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "No-EDF",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "fcfs",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  ],
+  "sensitivity_algorithms": [
+    {
+      "name": "Reference",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "Refresh-2s",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 2,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "Refresh-5s",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 5,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "Refresh-15s",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 15,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "Refresh-30s",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 30,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "Latency-dominant",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.55,
+        0.15,
+        0.15,
+        0.15
+      ]
+    },
+    {
+      "name": "Energy-dominant",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.15,
+        0.55,
+        0.15,
+        0.15
+      ]
+    },
+    {
+      "name": "Cost-dominant",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.15,
+        0.15,
+        0.55,
+        0.15
+      ]
+    },
+    {
+      "name": "Accuracy-dominant",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.15,
+        0.15,
+        0.15,
+        0.55
+      ]
+    },
+    {
+      "name": "Price-x0.5",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 0.5,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "Price-x2",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 2.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "LHS-0.30",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.3,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "name": "LHS-0.70",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.7,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  ],
+  "metric_definitions": {
+    "dmr_pct": "100 * (rejected + completed after deadline) / arrived after warm-up",
+    "throughput_tasks_s": "tasks completed within the 90 s measurement window / 90",
+    "fairness": "Jain index over per-fog-node completed-task counts, computed per seed",
+    "mape": "fractional absolute percentage error with epsilon=1e-6",
+    "run_cost_index": "mean bounded realized four-component objective; range [0,1]"
+  }
+}

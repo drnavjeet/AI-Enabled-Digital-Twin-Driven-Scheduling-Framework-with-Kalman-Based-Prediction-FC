@@ -15,6 +15,15 @@ from dt_kf import (
     select_venue,
 )
 from recompute import point_estimate_comparisons
+from experiment import (
+    AlgorithmVariant,
+    ExperimentConfig,
+    NodeRuntime,
+    ScheduledJob,
+    jain_fairness,
+    predictor_series,
+)
+from run_independent_experiments import holm_adjust, student_t_cdf
 
 
 class PredictorTests(unittest.TestCase):
@@ -90,6 +99,50 @@ class ResultAuditTests(unittest.TestCase):
             and item["comparator"] == "DT-OPT"
         )
         self.assertAlmostEqual(row["relative_improvement_pct"], 10.8416, places=4)
+
+
+class IndependentExperimentTests(unittest.TestCase):
+    def test_jain_fairness_uses_node_counts(self) -> None:
+        self.assertAlmostEqual(jain_fairness([10, 10, 10]), 1.0)
+        self.assertAlmostEqual(jain_fairness([10, 0]), 0.5)
+
+    def test_predictors_are_strictly_one_step_ahead(self) -> None:
+        values = np.asarray([0.2, 0.8, 0.3, 0.7])
+        variant = AlgorithmVariant("test", "last", "cost")
+        predictions = predictor_series(values, variant, ExperimentConfig())
+        self.assertAlmostEqual(predictions[1], values[0])
+        self.assertAlmostEqual(predictions[2], values[1])
+
+    def test_nonpreemptive_edf_reorders_only_waiting_jobs(self) -> None:
+        venue = VenueState("fog", "fog", 1000, 1e-12, 1e-5, 1.0, 1.0)
+        runtime = NodeRuntime()
+
+        def job(task_id: str, arrival: float, deadline: float, order: int) -> ScheduledJob:
+            return ScheduledJob(
+                Task(task_id, arrival, deadline, 1000, 0, 0),
+                venue,
+                arrival,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                True,
+                order,
+            )
+
+        running = job("running", 0.0, 10.0, 0)
+        waiting = job("waiting", 0.1, 9.0, 1)
+        urgent = job("urgent", 0.2, 2.0, 2)
+        runtime.schedule(running, 0.0, "edf")
+        runtime.schedule(waiting, 0.1, "edf")
+        runtime.schedule(urgent, 0.2, "edf")
+        self.assertAlmostEqual(running.service_end_s, 1.0)
+        self.assertAlmostEqual(urgent.service_start_s, 1.0)
+        self.assertAlmostEqual(waiting.service_start_s, 2.0)
+
+    def test_statistical_helpers_match_reference_values(self) -> None:
+        self.assertAlmostEqual(student_t_cdf(2.04523, 29), 0.975, places=3)
+        self.assertEqual(holm_adjust([0.01, 0.04, 0.03]), [0.03, 0.06, 0.06])
 
 
 if __name__ == "__main__":
