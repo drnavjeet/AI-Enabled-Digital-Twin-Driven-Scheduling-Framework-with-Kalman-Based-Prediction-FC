@@ -1,4 +1,8 @@
-# DT-KF Cost-Aware Reproduction
+# AI-Enabled Digital Twin-Driven Scheduling Framework with Kalman-Based Prediction for Fog Computing
+
+This work addresses efficient workload management under dynamic conditions and limited fog resources. Its core combines Digital Twin technology with Kalman-based prediction.
+
+## Reproduction Package
 
 This package implements the paper's deterministic venue-selection kernel and runs an independent, trace-backed benchmark for the prediction component. It also audits every result that can be checked from the PDF's displayed values.
 
