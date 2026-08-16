@@ -14,6 +14,7 @@ from dt_kf import (
     link_health_score,
     select_venue,
 )
+from recompute import point_estimate_comparisons
 
 
 class PredictorTests(unittest.TestCase):
@@ -72,6 +73,23 @@ class SchedulerTests(unittest.TestCase):
         decision = select_venue(task, [venue], self.config)
         evaluation = decision.evaluations[0]
         self.assertAlmostEqual(evaluation.communication_s, 1.0)
+
+
+class ResultAuditTests(unittest.TestCase):
+    def test_point_estimate_comparisons_are_complete(self) -> None:
+        rows = point_estimate_comparisons()
+        self.assertEqual(len(rows), 74)
+
+    def test_high_load_latency_vs_dt_opt_is_recomputed(self) -> None:
+        row = next(
+            item
+            for item in point_estimate_comparisons()
+            if item["table"] == "performance"
+            and item["load"] == "high"
+            and item["metric"] == "mean_latency_ms"
+            and item["comparator"] == "DT-OPT"
+        )
+        self.assertAlmostEqual(row["relative_improvement_pct"], 10.8416, places=4)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,6 @@
+calculation,required_file,required_fields,reason
+"Performance mean, SD, 95% CI, paired tests, and effect sizes",input_templates/run_kpis.csv,"seed, load, algorithm, mean_latency_ms, p95_latency_ms, dmr_pct, throughput_tasks_s, energy_j, run_cost_index, monetary_cost",Point estimates do not identify run-to-run variance or paired differences.
+Baseline Jain fairness,input_templates/node_counts.csv,"seed, load, algorithm, fog_node_id, completed_tasks",Aggregate throughput does not identify the per-node completion distribution.
+"High-load MAE, RMSE, MAPE, and prediction confidence intervals",input_templates/prediction_records.csv,"seed, load, algorithm, segment_id, timestamp, y_true, y_pred",The manuscript cells are missing or internally corrupted.
+Independent task-level KPI verification,input_templates/task_records.csv,"seed, load, algorithm, task_id, arrival_s, completion_s, deadline_s, completed, rejected, energy_j, monetary_cost, selected_venue, fog_node_id","Needed to verify task population, deadline misses, throughput, and aggregation rules."
+"Ablation, sensitivity, scalability, and dispatcher controls",new simulator reruns,"paired seed, configuration id, full parameter manifest, per-run KPIs, decision-time samples, memory, CPU, queue lengths, and rejection counts",These experiments are not derivable from the baseline summary table.

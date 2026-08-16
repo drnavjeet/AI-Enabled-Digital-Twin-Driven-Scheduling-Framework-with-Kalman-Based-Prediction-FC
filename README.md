@@ -12,6 +12,10 @@ It does **not** claim to reproduce the paper's exact Tables IV/V or XI/XII. The 
 
 - `dt_kf.py`: scalar Kalman, EMA and last-value predictors; Link Health Score; EDF queue estimate; constraints C1-C7; positive-maximum normalization; four-term objective; deterministic venue selection.
 - `recompute.py`: dataset inventory, predictor tuning/evaluation, paper arithmetic audit, and generated report.
+- `results/calculated_point_estimates.csv`: all 74 comparisons that are exactly calculable from the displayed tables.
+- `results/calculation_status.md`: concise calculated-versus-missing result summary.
+- `results/missing_data_requirements.csv`: the inputs required for cells and analyses that are not identifiable from aggregate values.
+- `input_templates/`: CSV schemas for the original run, node, prediction, and task records.
 - `example_config.json`: explicit illustrative scheduler values and benchmark grids. These are not represented as the paper's hidden settings.
 - `tests/test_dt_kf.py`: unit and unit-convention checks.
 - `results/`: generated CSV, JSON, and Markdown outputs.

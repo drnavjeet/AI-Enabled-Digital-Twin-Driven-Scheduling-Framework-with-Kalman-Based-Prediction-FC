@@ -354,6 +354,204 @@ TABLE_IV = {
 }
 
 
+PREDICTION_MEANS = {
+    "low": {
+        "DT-KF-CostAware": {"mae": 0.0624, "rmse": 0.0954, "mape": 0.1173},
+        "DT-OPT": {"mae": 0.0925, "rmse": 0.1612, "mape": 0.1766},
+        "SemiGreedy": {"mae": 0.1073, "rmse": 0.1895, "mape": 0.2110},
+        "Fog-only": {"mae": 0.1197, "rmse": 0.2105, "mape": 0.2142},
+    },
+    "medium": {
+        "DT-KF-CostAware": {"mae": 0.0769, "rmse": 0.1217, "mape": 0.1276},
+        "DT-OPT": {"mae": 0.1071, "rmse": 0.1843, "mape": 0.2059},
+        "SemiGreedy": {"mae": 0.1422, "rmse": 0.2309, "mape": 0.2334},
+        "Fog-only": {"mae": 0.1485, "rmse": 0.2460, "mape": 0.2501},
+    },
+    "high": {
+        "DT-KF-CostAware": {"mae": 0.0916, "rmse": None, "mape": None},
+        "DT-OPT": {"mae": None, "rmse": None, "mape": None},
+        "SemiGreedy": {"mae": 0.1674, "rmse": 0.2797, "mape": 0.2683},
+        "Fog-only": {"mae": 0.1788, "rmse": 0.3067, "mape": 0.2573},
+    },
+}
+
+
+def point_estimate_comparisons() -> list[dict[str, Any]]:
+    """Calculate only comparisons identifiable from the displayed table values."""
+    rows: list[dict[str, Any]] = []
+    performance_metrics = [
+        ("mean_latency_ms", 0, "lower"),
+        ("p95_latency_ms", 1, "lower"),
+        ("dmr_pct", 2, "lower"),
+        ("throughput_tasks_s", 3, "higher"),
+        ("energy_j", 4, "lower"),
+        ("run_cost_index", 5, "lower"),
+    ]
+    comparators = ("DT-OPT", "SemiGreedy", "Fog-only")
+
+    for load, algorithms in TABLE_IV.items():
+        proposed = algorithms["DT-KF-CostAware"]
+        for comparator in comparators:
+            baseline = algorithms[comparator]
+            for metric, index, preferred in performance_metrics:
+                if preferred == "higher":
+                    absolute_improvement = proposed[index] - baseline[index]
+                else:
+                    absolute_improvement = baseline[index] - proposed[index]
+                rows.append(
+                    {
+                        "table": "performance",
+                        "load": load,
+                        "metric": metric,
+                        "proposed_value": proposed[index],
+                        "comparator": comparator,
+                        "comparator_value": baseline[index],
+                        "absolute_improvement": round(absolute_improvement, 6),
+                        "relative_improvement_pct": round(
+                            100.0 * absolute_improvement / baseline[index], 4
+                        ),
+                        "preferred_direction": preferred,
+                        "status": "calculated_from_displayed_point_estimates",
+                    }
+                )
+
+    for load, algorithms in PREDICTION_MEANS.items():
+        proposed = algorithms["DT-KF-CostAware"]
+        for comparator in comparators:
+            baseline = algorithms[comparator]
+            for metric in ("mae", "rmse", "mape"):
+                proposed_value = proposed[metric]
+                comparator_value = baseline[metric]
+                if proposed_value is None or comparator_value is None:
+                    continue
+                absolute_improvement = comparator_value - proposed_value
+                rows.append(
+                    {
+                        "table": "prediction",
+                        "load": load,
+                        "metric": metric,
+                        "proposed_value": proposed_value,
+                        "comparator": comparator,
+                        "comparator_value": comparator_value,
+                        "absolute_improvement": round(absolute_improvement, 6),
+                        "relative_improvement_pct": round(
+                            100.0 * absolute_improvement / comparator_value, 4
+                        ),
+                        "preferred_direction": "lower",
+                        "status": "calculated_from_displayed_point_estimates",
+                    }
+                )
+    return rows
+
+
+def missing_data_requirements() -> list[dict[str, str]]:
+    return [
+        {
+            "calculation": "Performance mean, SD, 95% CI, paired tests, and effect sizes",
+            "required_file": "input_templates/run_kpis.csv",
+            "required_fields": (
+                "seed, load, algorithm, mean_latency_ms, p95_latency_ms, dmr_pct, "
+                "throughput_tasks_s, energy_j, run_cost_index, monetary_cost"
+            ),
+            "reason": "Point estimates do not identify run-to-run variance or paired differences.",
+        },
+        {
+            "calculation": "Baseline Jain fairness",
+            "required_file": "input_templates/node_counts.csv",
+            "required_fields": "seed, load, algorithm, fog_node_id, completed_tasks",
+            "reason": "Aggregate throughput does not identify the per-node completion distribution.",
+        },
+        {
+            "calculation": "High-load MAE, RMSE, MAPE, and prediction confidence intervals",
+            "required_file": "input_templates/prediction_records.csv",
+            "required_fields": "seed, load, algorithm, segment_id, timestamp, y_true, y_pred",
+            "reason": "The manuscript cells are missing or internally corrupted.",
+        },
+        {
+            "calculation": "Independent task-level KPI verification",
+            "required_file": "input_templates/task_records.csv",
+            "required_fields": (
+                "seed, load, algorithm, task_id, arrival_s, completion_s, deadline_s, "
+                "completed, rejected, energy_j, monetary_cost, selected_venue, fog_node_id"
+            ),
+            "reason": "Needed to verify task population, deadline misses, throughput, and aggregation rules.",
+        },
+        {
+            "calculation": "Ablation, sensitivity, scalability, and dispatcher controls",
+            "required_file": "new simulator reruns",
+            "required_fields": (
+                "paired seed, configuration id, full parameter manifest, per-run KPIs, "
+                "decision-time samples, memory, CPU, queue lengths, and rejection counts"
+            ),
+            "reason": "These experiments are not derivable from the baseline summary table.",
+        },
+    ]
+
+
+def render_calculation_status(comparisons: list[dict[str, Any]]) -> str:
+    performance = {
+        (row["load"], row["metric"]): row["relative_improvement_pct"]
+        for row in comparisons
+        if row["table"] == "performance" and row["comparator"] == "Fog-only"
+    }
+    prediction = {
+        (row["load"], row["metric"]): row["relative_improvement_pct"]
+        for row in comparisons
+        if row["table"] == "prediction" and row["comparator"] == "Fog-only"
+    }
+    metric_labels = [
+        ("Mean latency", "mean_latency_ms"),
+        ("p95 latency", "p95_latency_ms"),
+        ("Deadline-miss ratio", "dmr_pct"),
+        ("Throughput", "throughput_tasks_s"),
+        ("Energy", "energy_j"),
+        ("Run-cost index", "run_cost_index"),
+    ]
+    lines = [
+        "# Calculation Status",
+        "",
+        f"Exactly {len(comparisons)} relative comparisons are identifiable from the displayed table values.",
+        "They verify arithmetic only; they do not validate the underlying experiment or uncertainty.",
+        "",
+        "## DT-KF-CostAware improvement versus Fog-only",
+        "",
+        "| Metric | Low | Medium | High |",
+        "|---|---:|---:|---:|",
+    ]
+    for label, metric in metric_labels:
+        values = [performance[(load, metric)] for load in ("low", "medium", "high")]
+        lines.append(f"| {label} | {values[0]:.4f}% | {values[1]:.4f}% | {values[2]:.4f}% |")
+    lines.extend(
+        [
+            "",
+            "## Prediction-error reduction versus Fog-only",
+            "",
+            "| Load | MAE | RMSE | MAPE |",
+            "|---|---:|---:|---:|",
+            (
+                f"| Low | {prediction[('low', 'mae')]:.4f}% | "
+                f"{prediction[('low', 'rmse')]:.4f}% | {prediction[('low', 'mape')]:.4f}% |"
+            ),
+            (
+                f"| Medium | {prediction[('medium', 'mae')]:.4f}% | "
+                f"{prediction[('medium', 'rmse')]:.4f}% | {prediction[('medium', 'mape')]:.4f}% |"
+            ),
+            f"| High | {prediction[('high', 'mae')]:.4f}% | unavailable | unavailable |",
+            "",
+            "## Not calculable from the supplied summary",
+            "",
+            "- Nine baseline Jain-fairness values: per-fog-node completed-task counts are absent.",
+            "- Five high-load prediction cells: the original ground truth and aligned predictions are absent.",
+            "- Performance SDs, 95% CIs, paired tests, corrected p-values, and effect sizes: per-seed KPIs are absent.",
+            "- Ablation, sensitivity, dispatcher-control, and scalability tables: these require new paired simulator runs.",
+            "- The original fairness-improvement percentages imply approximate Fog-only values, but reverse-engineering rounded claims is not a valid calculation and is intentionally excluded.",
+            "",
+            "Populate the CSVs in `input_templates/` with the original simulation records to calculate these items.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def result_audit() -> list[dict[str, Any]]:
     metrics = ["mean_latency", "p95_latency", "dmr", "throughput", "energy", "cost_index"]
     claimed_vs_fog = {
@@ -638,6 +836,7 @@ def main() -> None:
 
     inventory = dataset_inventory(args.data_root.resolve(), args.ifogsim_root.resolve())
     audit = result_audit()
+    comparisons = point_estimate_comparisons()
     trace_path = (
         args.data_root.resolve()
         / "datacenter-traces-datasets"
@@ -650,6 +849,8 @@ def main() -> None:
 
     write_csv(output_dir / "dataset_inventory.csv", inventory)
     write_csv(output_dir / "paper_result_audit.csv", audit)
+    write_csv(output_dir / "calculated_point_estimates.csv", comparisons)
+    write_csv(output_dir / "missing_data_requirements.csv", missing_data_requirements())
     write_csv(output_dir / "prediction_segment_metrics.csv", detailed)
     write_csv(output_dir / "prediction_metrics.csv", benchmark)
     (output_dir / "tuned_parameters.json").write_text(
@@ -660,6 +861,9 @@ def main() -> None:
     )
     (output_dir / "validation_report.md").write_text(
         render_report(inventory, audit, benchmark, tuning), encoding="utf-8"
+    )
+    (output_dir / "calculation_status.md").write_text(
+        render_calculation_status(comparisons), encoding="utf-8"
     )
     print(f"Wrote results to {output_dir}")
 
