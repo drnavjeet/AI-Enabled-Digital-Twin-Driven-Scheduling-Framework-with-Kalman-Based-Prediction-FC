@@ -23,6 +23,7 @@ It does **not** claim to reproduce the paper's exact Tables IV/V or XI/XII. The 
 - `run_independent_experiments.py`: main, ablation, sensitivity, scalability, confidence-interval, paired-test, and effect-size calculations.
 - `validate_independent_results.py`: independent reconciliation of reported KPIs against raw task, node, and prediction records.
 - `results/independent_experiment/`: complete rerun outputs, including compressed raw records and publication-ready LaTeX tables.
+- `results/excel/`: verified Excel workbooks for the complete results, per-seed records, and aligned raw predictions.
 
 ## Run
 
