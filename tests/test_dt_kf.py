@@ -11,6 +11,7 @@ from dt_kf import (
     Task,
     VenueState,
     error_metrics,
+    expected_retransmission_factor,
     link_health_score,
     select_venue,
 )
@@ -22,8 +23,11 @@ from experiment import (
     ScheduledJob,
     jain_fairness,
     predictor_series,
+    predictor_matrix,
+    _realized_network_transfer,
 )
-from run_independent_experiments import holm_adjust, student_t_cdf
+from drl_oo import DRLOOConfig, DRLOOPolicy
+from run_independent_experiments import holm_adjust, paired_t_test, student_t_cdf
 
 
 class PredictorTests(unittest.TestCase):
@@ -55,6 +59,22 @@ class SchedulerTests(unittest.TestCase):
         score = link_health_score(self.good_link, self.config)
         self.assertGreaterEqual(score, 0.0)
         self.assertLessEqual(score, 1.0)
+
+    def test_packet_loss_and_jitter_reduce_link_health(self) -> None:
+        impaired = LinkState(
+            **{
+                **self.good_link.__dict__,
+                "packet_loss_rate": 0.03,
+                "jitter_s": 0.015,
+            }
+        )
+        self.assertLess(
+            link_health_score(impaired, self.config),
+            link_health_score(self.good_link, self.config),
+        )
+
+    def test_retry_factor_is_capped_geometric_sum(self) -> None:
+        self.assertAlmostEqual(expected_retransmission_factor(0.1, 3), 1.111)
 
     def test_infeasible_candidate_is_rejected_before_ranking(self) -> None:
         task = Task("t1", 0.0, 0.5, 500.0, 10_000, 2_000, min_trust=0.8)
@@ -113,6 +133,44 @@ class IndependentExperimentTests(unittest.TestCase):
         self.assertAlmostEqual(predictions[1], values[0])
         self.assertAlmostEqual(predictions[2], values[1])
 
+    def test_qos_predictor_is_strictly_one_step_ahead_per_link(self) -> None:
+        values = np.asarray([[0.01, 0.02], [0.03, 0.04], [0.02, 0.05]])
+        variant = AlgorithmVariant("test", "last", "cost", qos_aware=True)
+        predictions = predictor_matrix(values, variant, ExperimentConfig(), lower=0.0, upper=0.2)
+        np.testing.assert_allclose(predictions[1], values[0])
+        np.testing.assert_allclose(predictions[2], values[1])
+
+    def test_realized_network_transfer_is_paired_and_deterministic(self) -> None:
+        task = Task("network", 0.0, 10.0, 10.0, 500_000, 200_000)
+        venue = VenueState(
+            "fog-1",
+            "fog",
+            5000,
+            1e-12,
+            0.0,
+            1.0,
+            1.0,
+            link=LinkState(10_000_000, 20_000_000, 0.01, 0.01, 0.2, 0.01),
+        )
+        first = _realized_network_transfer(
+            task, venue, ExperimentConfig(), scenario_seed=7, task_order=3
+        )
+        second = _realized_network_transfer(
+            task, venue, ExperimentConfig(), scenario_seed=7, task_order=3
+        )
+        self.assertEqual(first, second)
+        self.assertGreater(first.retransmission_bytes, 0.0)
+
+    def test_drl_oo_selects_only_feasible_venues(self) -> None:
+        policy = DRLOOPolicy(DRLOOConfig(hidden_units=8), seed=9)
+        task = Task("ai", 0.0, 1.0, 100.0, 1000, 100, min_trust=0.8)
+        link = LinkState(20_000_000, 40_000_000, 0.005, 0.005)
+        venues = [
+            VenueState("bad", "fog", 5000, 1e-12, 0.0, 0.2, 0.9, link=link),
+            VenueState("good", "fog", 5000, 1e-12, 0.0, 0.95, 0.9, link=link),
+        ]
+        self.assertEqual(policy.select_venue(task, venues, decision_seed=1), "good")
+
     def test_nonpreemptive_edf_reorders_only_waiting_jobs(self) -> None:
         venue = VenueState("fog", "fog", 1000, 1e-12, 1e-5, 1.0, 1.0)
         runtime = NodeRuntime()
@@ -143,6 +201,7 @@ class IndependentExperimentTests(unittest.TestCase):
     def test_statistical_helpers_match_reference_values(self) -> None:
         self.assertAlmostEqual(student_t_cdf(2.04523, 29), 0.975, places=3)
         self.assertEqual(holm_adjust([0.01, 0.04, 0.03]), [0.03, 0.06, 0.06])
+        self.assertEqual(paired_t_test(np.zeros(30)), (0.0, 1.0))
 
 
 if __name__ == "__main__":

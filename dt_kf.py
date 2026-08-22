@@ -34,6 +34,9 @@ class LinkState:
     downlink_bps: float
     uplink_latency_s: float
     downlink_latency_s: float
+    packet_loss_rate: float = 0.0
+    jitter_s: float = 0.0
+    max_retries: int = 3
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,10 @@ class SchedulerConfig:
     reference_downlink_bps: float = 20_000_000.0
     reference_uplink_latency_s: float = 0.050
     reference_downlink_latency_s: float = 0.050
+    reference_packet_loss_rate: float = 0.150
+    reference_jitter_s: float = 0.100
+    maximum_packet_loss_rate: float = 0.150
+    maximum_jitter_s: float = 0.100
     device_tx_power_w: float = 1.3
     device_rx_power_w: float = 0.9
 
@@ -167,13 +174,29 @@ def error_metrics(
 
 
 def link_health_score(link: LinkState, config: SchedulerConfig) -> float:
-    components = (
+    legacy_components = (
         min(link.uplink_bps / config.reference_uplink_bps, 1.0),
         min(link.downlink_bps / config.reference_downlink_bps, 1.0),
         1.0 - min(link.uplink_latency_s / config.reference_uplink_latency_s, 1.0),
         1.0 - min(link.downlink_latency_s / config.reference_downlink_latency_s, 1.0),
     )
-    return float(prod(max(0.0, value) for value in components) ** 0.25)
+    if link.packet_loss_rate == 0.0 and link.jitter_s == 0.0:
+        components = legacy_components
+    else:
+        components = legacy_components + (
+            1.0 - min(link.packet_loss_rate / config.reference_packet_loss_rate, 1.0),
+            1.0 - min(link.jitter_s / config.reference_jitter_s, 1.0),
+        )
+    return float(prod(max(0.0, value) for value in components) ** (1.0 / len(components)))
+
+
+def expected_retransmission_factor(packet_loss_rate: float, max_retries: int) -> float:
+    """Expected transmissions per packet for a retry-capped independent-loss model."""
+    if not 0.0 <= packet_loss_rate < 1.0:
+        raise ValueError("Packet-loss rate must be in [0, 1)")
+    if max_retries < 0:
+        raise ValueError("Maximum retries must be non-negative")
+    return float(sum(packet_loss_rate**attempt for attempt in range(max_retries + 1)))
 
 
 def edf_queue_delay_s(task: Task, venue: VenueState) -> float:
@@ -207,16 +230,25 @@ def _evaluate_candidate(
             reasons.append("missing_link_state")
         else:
             link = venue.link
+            if not 0.0 <= link.packet_loss_rate < 1.0:
+                raise ValueError(f"Venue {venue.name} has an invalid packet-loss rate")
+            if link.jitter_s < 0.0:
+                raise ValueError(f"Venue {venue.name} has negative jitter")
             if min(link.uplink_bps, link.downlink_bps) < config.minimum_bandwidth_bps:
                 reasons.append("bandwidth_below_minimum")
             # Task sizes are bytes while bandwidth is bits/s, so the factor eight is required.
-            uplink_tx_s = 8.0 * task.uplink_bytes / link.uplink_bps
-            downlink_tx_s = 8.0 * task.downlink_bytes / link.downlink_bps
+            retry_factor = expected_retransmission_factor(
+                link.packet_loss_rate, link.max_retries
+            )
+            uplink_tx_s = 8.0 * task.uplink_bytes / link.uplink_bps * retry_factor
+            downlink_tx_s = 8.0 * task.downlink_bytes / link.downlink_bps * retry_factor
             communication_s = (
                 uplink_tx_s
                 + link.uplink_latency_s
+                + link.jitter_s
                 + downlink_tx_s
                 + link.downlink_latency_s
+                + link.jitter_s
             )
             device_energy_j = (
                 config.device_tx_power_w * uplink_tx_s
@@ -226,6 +258,10 @@ def _evaluate_candidate(
                 lhs = link_health_score(link, config)
                 if lhs < config.minimum_lhs:
                     reasons.append("lhs_below_minimum")
+            if link.packet_loss_rate > config.maximum_packet_loss_rate:
+                reasons.append("packet_loss_above_maximum")
+            if link.jitter_s > config.maximum_jitter_s:
+                reasons.append("jitter_above_maximum")
 
     latency_s = communication_s + queue_s + compute_s
     venue_energy_j = venue.energy_coefficient * task.compute_mi * venue.mips**2
@@ -295,4 +331,3 @@ def select_venue(
     eligible = [item for item in scored if item.feasible and item.objective is not None]
     selected = min(eligible, key=lambda item: (item.objective, item.latency_s, item.venue))
     return Decision(task.task_id, selected.venue, False, tuple(scored))
-

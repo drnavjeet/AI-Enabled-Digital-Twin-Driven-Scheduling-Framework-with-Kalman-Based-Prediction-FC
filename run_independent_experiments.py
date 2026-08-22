@@ -53,6 +53,12 @@ LOWER_IS_BETTER = {
     "monetary_cost",
     "run_cost_index",
     "rejection_rate_pct",
+    "network_failure_rate_pct",
+    "mean_packet_loss_pct",
+    "mean_jitter_ms",
+    "p95_jitter_ms",
+    "retransmission_overhead_pct",
+    "retransmission_energy_j",
 }
 
 
@@ -232,7 +238,8 @@ def jarque_bera_p(values: np.ndarray) -> float:
 def paired_t_test(differences: np.ndarray) -> tuple[float, float]:
     sd = float(np.std(differences, ddof=1))
     if sd <= 1e-18:
-        return (math.inf if float(np.mean(differences)) != 0 else 0.0), 0.0
+        mean = float(np.mean(differences))
+        return (math.copysign(math.inf, mean), 0.0) if mean != 0.0 else (0.0, 1.0)
     statistic = float(np.mean(differences)) / (sd / math.sqrt(len(differences)))
     p_value = 2.0 * (1.0 - student_t_cdf(abs(statistic), len(differences) - 1))
     return statistic, min(max(p_value, 0.0), 1.0)
@@ -285,9 +292,25 @@ def bootstrap_effect_ci(
     differences: np.ndarray,
     effect_function: Callable[[np.ndarray], float],
     seed: int,
-    samples: int = 2000,
+    samples: int = 1000,
 ) -> tuple[float, float]:
+    if np.all(np.abs(differences) <= 1e-18):
+        return 0.0, 0.0
     rng = np.random.default_rng(seed)
+    if effect_function is _cohens_dz:
+        sampled = differences[
+            rng.integers(0, len(differences), size=(samples, len(differences)))
+        ]
+        means = np.mean(sampled, axis=1)
+        standard_deviations = np.std(sampled, axis=1, ddof=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            estimates_array = means / standard_deviations
+        estimates_array = estimates_array[np.isfinite(estimates_array)]
+        if len(estimates_array) == 0:
+            return math.nan, math.nan
+        return tuple(
+            float(value) for value in np.percentile(estimates_array, [2.5, 97.5])
+        )
     estimates: list[float] = []
     for _ in range(samples):
         sample = rng.choice(differences, size=len(differences), replace=True)

@@ -1,0 +1,27 @@
+% Generated packet-loss/jitter and DRL-OO revision table.
+\begin{table*}[t]
+\centering
+\caption{Paired revised evaluation under the impaired network regime (mean $\pm$ 95\% CI over 30 seeds).}
+\label{tab:qos_ai_revised}
+\begin{tabular}{llrrrrr}
+\toprule
+Load & Algorithm & Latency (ms) & DMR (\%) & Throughput & Energy (J) & SLA (\%) \\
+\midrule
+high & DRL-OO-2025 & 482.77 $\pm$ 6.15 & 25.36 & 16.95 & 265.61 & 74.64 \\
+high & DT-KF-CostAware & 505.99 $\pm$ 5.17 & 27.33 & 17.04 & 221.73 & 72.67 \\
+high & DT-OPT & 508.01 $\pm$ 5.95 & 27.54 & 17.06 & 221.13 & 72.46 \\
+high & Fog-only & 697.41 $\pm$ 77.09 & 57.26 & 17.80 & 117.95 & 42.74 \\
+high & SemiGreedy & 395.99 $\pm$ 6.26 & 12.81 & 17.90 & 347.40 & 87.19 \\
+low & DRL-OO-2025 & 277.83 $\pm$ 5.32 & 1.15 & 4.97 & 85.80 & 98.85 \\
+low & DT-KF-CostAware & 273.26 $\pm$ 5.25 & 1.53 & 4.97 & 94.02 & 98.47 \\
+low & DT-OPT & 273.41 $\pm$ 5.16 & 1.57 & 4.97 & 93.94 & 98.43 \\
+low & Fog-only & 255.30 $\pm$ 4.22 & 0.03 & 4.97 & 110.52 & 99.97 \\
+low & SemiGreedy & 216.57 $\pm$ 2.56 & 0.03 & 4.97 & 230.69 & 99.97 \\
+medium & DRL-OO-2025 & 363.49 $\pm$ 6.03 & 6.77 & 9.94 & 123.95 & 93.23 \\
+medium & DT-KF-CostAware & 367.44 $\pm$ 7.07 & 7.51 & 9.94 & 123.46 & 92.49 \\
+medium & DT-OPT & 367.64 $\pm$ 7.20 & 7.56 & 9.94 & 123.60 & 92.44 \\
+medium & Fog-only & 337.11 $\pm$ 6.14 & 0.81 & 9.95 & 130.09 & 99.19 \\
+medium & SemiGreedy & 284.27 $\pm$ 3.24 & 0.42 & 9.95 & 307.16 & 99.58 \\
+\bottomrule
+\end{tabular}
+\end{table*}

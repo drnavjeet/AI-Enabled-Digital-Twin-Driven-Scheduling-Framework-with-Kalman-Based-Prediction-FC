@@ -17,13 +17,15 @@ from dt_kf import (
     Task,
     VenueState,
     ema_predictions,
+    expected_retransmission_factor,
     last_value_predictions,
     select_venue,
 )
 
 
 LoadLevel = Literal["low", "medium", "high"]
-Policy = Literal["cost", "latency", "nearest_fog"]
+QoSRegime = Literal["none", "clean", "moderate", "impaired"]
+Policy = Literal["cost", "latency", "nearest_fog", "drl_oo"]
 Predictor = Literal["kalman", "ema", "last", "mean"]
 
 
@@ -50,6 +52,8 @@ class ExperimentConfig:
     kalman_r: float = 0.01
     ema_alpha: float = 0.12
     mape_epsilon: float = 1e-6
+    packet_payload_bytes: int = 1460
+    max_network_retries: int = 3
 
     def rate(self, load: LoadLevel) -> float:
         return dict(self.arrival_rates)[load]
@@ -72,6 +76,9 @@ class AlgorithmVariant:
     price_multiplier: float = 1.0
     minimum_lhs: float = 0.67
     weights: tuple[float, float, float, float] = (0.40, 0.20, 0.20, 0.20)
+    qos_aware: bool = False
+    loss_aware: bool = True
+    jitter_aware: bool = True
 
 
 @dataclass(frozen=True)
@@ -107,6 +114,9 @@ class Scenario:
     tasks: tuple[SimTask, ...]
     true_load: np.ndarray
     link_noise: np.ndarray
+    packet_loss: np.ndarray
+    jitter_s: np.ndarray
+    qos_regime: QoSRegime
     fog_profiles: tuple[FogProfile, ...]
     user_coordinates: np.ndarray
     total_duration_s: float
@@ -126,6 +136,24 @@ class ScheduledJob:
     service_start_s: float = math.inf
     service_end_s: float = math.inf
     completion_s: float = math.inf
+    packet_loss_rate: float = 0.0
+    jitter_s: float = 0.0
+    retransmission_bytes: float = 0.0
+    network_failed: bool = False
+    uplink_serialization_s: float = 0.0
+    downlink_serialization_s: float = 0.0
+
+
+@dataclass(frozen=True)
+class NetworkTransfer:
+    communication_s: float
+    uplink_s: float
+    downlink_s: float
+    uplink_serialization_s: float
+    downlink_serialization_s: float
+    jitter_s: float
+    retransmission_bytes: float
+    failed: bool
 
 
 @dataclass
@@ -245,8 +273,8 @@ def _robust_unit_scale(values: np.ndarray) -> np.ndarray:
 
 def main_algorithms() -> tuple[AlgorithmVariant, ...]:
     return (
-        AlgorithmVariant("DT-KF-CostAware", "kalman", "cost"),
-        AlgorithmVariant("DT-OPT", "ema", "cost"),
+        AlgorithmVariant("DT-KF-CostAware", "kalman", "cost", qos_aware=True),
+        AlgorithmVariant("DT-OPT", "ema", "cost", qos_aware=True),
         AlgorithmVariant(
             "SemiGreedy",
             "last",
@@ -264,6 +292,26 @@ def main_algorithms() -> tuple[AlgorithmVariant, ...]:
             admission=False,
             queue_mode="fcfs",
             allowed_kinds=("fog",),
+        ),
+    )
+
+
+def qos_algorithms() -> tuple[AlgorithmVariant, ...]:
+    """Main reviewer-revision algorithms, including the 2025 DRL-OO adaptation."""
+    revised = tuple(
+        replace(item, minimum_lhs=0.30) if item.qos_aware else item
+        for item in main_algorithms()
+    )
+    return revised + (
+        AlgorithmVariant(
+            "DRL-OO-2025",
+            "last",
+            "drl_oo",
+            use_dt_state=True,
+            use_lhs=False,
+            admission=True,
+            queue_mode="edf",
+            qos_aware=True,
         ),
     )
 
@@ -309,6 +357,9 @@ def generate_scenario(
     *,
     fog_count: int | None = None,
     fixed_task_count: int | None = None,
+    qos_regime: QoSRegime = "none",
+    qos_loss_rate: float | None = None,
+    qos_jitter_s: float | None = None,
 ) -> Scenario:
     rng = np.random.default_rng(seed)
     total_duration_s = config.warmup_s + config.measurement_s
@@ -343,6 +394,43 @@ def generate_scenario(
         for index, site_index in enumerate(site_indices)
     )
     link_noise = np.clip(rng.normal(0.0, 0.07, (telemetry_points, fog_count)), -0.20, 0.20)
+
+    qos_defaults = {
+        "none": (0.0, 0.0),
+        "clean": (0.001, 0.0015),
+        "moderate": (0.015, 0.008),
+        "impaired": (0.050, 0.025),
+    }
+    base_loss, base_jitter = qos_defaults[qos_regime]
+    if qos_loss_rate is not None:
+        base_loss = qos_loss_rate
+    if qos_jitter_s is not None:
+        base_jitter = qos_jitter_s
+    if not 0.0 <= base_loss < 1.0 or base_jitter < 0.0:
+        raise ValueError("QoS loss and jitter parameters must be non-negative and loss < 1")
+
+    qos_nodes = fog_count + 1  # Fog links plus the cloud link.
+    temporal_noise = rng.normal(0.0, 0.22, (telemetry_points, qos_nodes))
+    for index in range(1, telemetry_points):
+        temporal_noise[index] = 0.72 * temporal_noise[index - 1] + 0.28 * temporal_noise[index]
+    node_factors = rng.uniform(0.82, 1.18, qos_nodes)
+    node_factors[-1] *= 0.80
+    load_multiplier = (0.55 + 0.90 * true_load)[:, None]
+    packet_loss = np.clip(
+        base_loss * load_multiplier * node_factors[None, :] * np.exp(temporal_noise),
+        0.0,
+        0.20,
+    )
+    jitter_factors = rng.uniform(0.82, 1.18, qos_nodes)
+    jitter_factors[-1] *= 1.20
+    jitter_s = np.clip(
+        base_jitter
+        * load_multiplier
+        * jitter_factors[None, :]
+        * np.exp(0.75 * temporal_noise),
+        0.0,
+        0.15,
+    )
 
     if fixed_task_count is None:
         arrivals: list[float] = []
@@ -391,6 +479,9 @@ def generate_scenario(
         tasks=tuple(tasks),
         true_load=true_load,
         link_noise=link_noise,
+        packet_loss=packet_loss,
+        jitter_s=jitter_s,
+        qos_regime=qos_regime,
         fog_profiles=fog_profiles,
         user_coordinates=data.user_coordinates,
         total_duration_s=total_duration_s,
@@ -401,6 +492,9 @@ def predictor_series(
     true_load: np.ndarray,
     variant: AlgorithmVariant,
     config: ExperimentConfig,
+    *,
+    lower: float = 0.02,
+    upper: float = 0.98,
 ) -> np.ndarray:
     if variant.predictor == "kalman":
         base = ScalarKalman(config.kalman_q, config.kalman_r).one_step_predictions(true_load)
@@ -418,7 +512,30 @@ def predictor_series(
             refresh_index = (index // interval) * interval
             held[index] = base[refresh_index]
         base = held
-    return np.clip(base, 0.02, 0.98)
+    return np.clip(base, lower, upper)
+
+
+def predictor_matrix(
+    values: np.ndarray,
+    variant: AlgorithmVariant,
+    config: ExperimentConfig,
+    *,
+    lower: float = 0.0,
+    upper: float = 1.0,
+) -> np.ndarray:
+    """Apply the selected strictly one-step-ahead predictor independently per link."""
+    matrix = np.asarray(values, dtype=float)
+    if matrix.ndim != 2:
+        raise ValueError("Expected a telemetry-by-link matrix")
+    predicted = np.column_stack(
+        [
+            predictor_series(
+                matrix[:, index], variant, config, lower=lower, upper=upper
+            )
+            for index in range(matrix.shape[1])
+        ]
+    )
+    return np.clip(predicted, lower, upper)
 
 
 def simulate_run(
@@ -428,13 +545,30 @@ def simulate_run(
     *,
     record_tasks: bool = False,
     record_predictions: bool = False,
+    record_qos_predictions: bool = False,
     measure_memory: bool = False,
+    policy_model: Any | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     predicted_load = predictor_series(scenario.true_load, variant, config)
+    if variant.qos_aware:
+        predicted_loss = predictor_matrix(
+            scenario.packet_loss, variant, config, lower=0.0, upper=0.20
+        )
+        predicted_jitter = predictor_matrix(
+            scenario.jitter_s, variant, config, lower=0.0, upper=0.15
+        )
+        if not variant.loss_aware:
+            predicted_loss = np.zeros_like(scenario.packet_loss)
+        if not variant.jitter_aware:
+            predicted_jitter = np.zeros_like(scenario.jitter_s)
+    else:
+        predicted_loss = np.zeros_like(scenario.packet_loss)
+        predicted_jitter = np.zeros_like(scenario.jitter_s)
     runtimes: dict[str, NodeRuntime] = {"local": NodeRuntime(), "cloud": NodeRuntime()}
     runtimes.update({profile.name: NodeRuntime() for profile in scenario.fog_profiles})
     scheduled_jobs: list[ScheduledJob] = []
     rejected_tasks: list[Task] = []
+    network_failed_tasks: list[tuple[Task, VenueState, NetworkTransfer]] = []
     decision_times_us: list[float] = []
 
     if measure_memory:
@@ -461,9 +595,17 @@ def simulate_run(
             estimate,
             variant,
             actual=False,
+            qos_loss=predicted_loss[telemetry_index],
+            qos_jitter=predicted_jitter[telemetry_index],
         )
         decision_start = time.perf_counter_ns()
-        selected = _choose_venue(task, predicted_venues, variant)
+        selected = _choose_venue(
+            task,
+            predicted_venues,
+            variant,
+            policy_model=policy_model,
+            decision_seed=scenario.seed * 1_000_003 + order,
+        )
         decision_times_us.append((time.perf_counter_ns() - decision_start) / 1000.0)
         measured = task.arrival_s >= config.warmup_s
         if selected is None:
@@ -480,25 +622,43 @@ def simulate_run(
             current_load,
             variant,
             actual=True,
+            qos_loss=scenario.packet_loss[telemetry_index],
+            qos_jitter=scenario.jitter_s[telemetry_index],
         )
         actual = next(venue for venue in true_venues if venue.name == selected)
-        communication_s, uplink_s, downlink_s = _communication_times(task, actual)
+        transfer = _realized_network_transfer(
+            task,
+            actual,
+            config,
+            scenario_seed=scenario.seed,
+            task_order=order,
+        )
+        if transfer.failed:
+            if measured:
+                network_failed_tasks.append((task, actual, transfer))
+            continue
         venue_energy = actual.energy_coefficient * task.compute_mi * actual.mips**2
         device_energy = 0.0
         if actual.kind != "local" and actual.link is not None:
-            tx_s = max(uplink_s - actual.link.uplink_latency_s, 0.0)
-            rx_s = max(downlink_s - actual.link.downlink_latency_s, 0.0)
-            device_energy = 1.3 * tx_s + 0.9 * rx_s
+            device_energy = (
+                1.3 * transfer.uplink_serialization_s
+                + 0.9 * transfer.downlink_serialization_s
+            )
         job = ScheduledJob(
             task=task,
             venue=actual,
-            service_arrival_s=task.arrival_s + communication_s - downlink_s,
+            service_arrival_s=task.arrival_s + transfer.uplink_s,
             service_s=task.compute_mi / actual.mips,
-            downlink_s=downlink_s,
+            downlink_s=transfer.downlink_s,
             energy_j=venue_energy + device_energy,
             monetary_cost=actual.price_per_mi * task.compute_mi,
             measured=measured,
             order=order,
+            packet_loss_rate=actual.link.packet_loss_rate if actual.link is not None else 0.0,
+            jitter_s=transfer.jitter_s,
+            retransmission_bytes=transfer.retransmission_bytes,
+            uplink_serialization_s=transfer.uplink_serialization_s,
+            downlink_serialization_s=transfer.downlink_serialization_s,
         )
         runtimes[selected].schedule(
             job,
@@ -516,20 +676,30 @@ def simulate_run(
         tracemalloc.stop()
 
     measured_jobs = [job for job in scheduled_jobs if job.measured]
-    arrivals = len(measured_jobs) + len(rejected_tasks)
+    arrivals = len(measured_jobs) + len(rejected_tasks) + len(network_failed_tasks)
     completions = sum(job.completion_s <= scenario.total_duration_s for job in measured_jobs)
-    misses = len(rejected_tasks) + sum(
+    misses = len(rejected_tasks) + len(network_failed_tasks) + sum(
         job.completion_s > job.task.deadline_s for job in measured_jobs
     )
     latency_array = np.asarray(
         [1000.0 * (job.completion_s - job.task.arrival_s) for job in measured_jobs],
         dtype=float,
     )
-    total_energy_j = sum(job.energy_j for job in measured_jobs)
+    failed_energy_j = sum(
+        1.3 * transfer.uplink_serialization_s + 0.9 * transfer.downlink_serialization_s
+        for _, _, transfer in network_failed_tasks
+    )
+    total_energy_j = sum(job.energy_j for job in measured_jobs) + failed_energy_j
     total_monetary_cost = sum(job.monetary_cost for job in measured_jobs)
-    venue_counts = {"local": 0, "fog": 0, "cloud": 0, "rejected": len(rejected_tasks)}
+    venue_counts = {
+        "local": 0,
+        "fog": 0,
+        "cloud": 0,
+        "rejected": len(rejected_tasks),
+        "network_failed": len(network_failed_tasks),
+    }
     fog_counts = {profile.name: 0 for profile in scenario.fog_profiles}
-    realized_objectives = [1.0] * len(rejected_tasks)
+    realized_objectives = [1.0] * (len(rejected_tasks) + len(network_failed_tasks))
     for job in measured_jobs:
         venue_counts[job.venue.kind] += 1
         if job.venue.kind == "fog" and job.completion_s <= scenario.total_duration_s:
@@ -552,6 +722,45 @@ def simulate_run(
             )
         )
 
+    remote_jobs = [job for job in measured_jobs if job.venue.link is not None]
+    qos_loss_values = [job.packet_loss_rate for job in remote_jobs] + [
+        venue.link.packet_loss_rate
+        for _, venue, _ in network_failed_tasks
+        if venue.link is not None
+    ]
+    qos_jitter_values = [job.jitter_s for job in remote_jobs] + [
+        transfer.jitter_s for _, _, transfer in network_failed_tasks
+    ]
+    retransmission_bytes = sum(job.retransmission_bytes for job in remote_jobs) + sum(
+        transfer.retransmission_bytes for _, _, transfer in network_failed_tasks
+    )
+    original_network_bytes = sum(
+        job.task.uplink_bytes + job.task.downlink_bytes for job in remote_jobs
+    ) + sum(
+        task.uplink_bytes + task.downlink_bytes for task, _, _ in network_failed_tasks
+    )
+    retransmission_energy_j = 0.0
+    for job in remote_jobs:
+        link = job.venue.link
+        if link is None:
+            continue
+        base_up = 8.0 * job.task.uplink_bytes / link.uplink_bps
+        base_down = 8.0 * job.task.downlink_bytes / link.downlink_bps
+        retransmission_energy_j += (
+            1.3 * max(job.uplink_serialization_s - base_up, 0.0)
+            + 0.9 * max(job.downlink_serialization_s - base_down, 0.0)
+        )
+    for task, venue, transfer in network_failed_tasks:
+        link = venue.link
+        if link is None:
+            continue
+        base_up = 8.0 * task.uplink_bytes / link.uplink_bps
+        base_down = 8.0 * task.downlink_bytes / link.downlink_bps
+        retransmission_energy_j += (
+            1.3 * max(transfer.uplink_serialization_s - base_up, 0.0)
+            + 0.9 * max(transfer.downlink_serialization_s - base_down, 0.0)
+        )
+
     task_records: list[dict[str, Any]] = []
     if record_tasks:
         task_records.extend(
@@ -569,14 +778,35 @@ def simulate_run(
                 False,
                 job.energy_j,
                 job.monetary_cost,
+                packet_loss_rate=job.packet_loss_rate,
+                jitter_s=job.jitter_s,
+                retransmission_bytes=job.retransmission_bytes,
             )
             for job in measured_jobs
+        )
+        task_records.extend(
+            _task_record(
+                scenario,
+                variant,
+                task,
+                venue,
+                None,
+                True,
+                False,
+                1.3 * transfer.uplink_serialization_s
+                + 0.9 * transfer.downlink_serialization_s,
+                0.0,
+                network_failed=True,
+                transfer=transfer,
+            )
+            for task, venue, transfer in network_failed_tasks
         )
 
     fairness = jain_fairness(list(fog_counts.values()))
     run = {
         "seed": scenario.seed,
         "load": scenario.load,
+        "qos_regime": scenario.qos_regime,
         "algorithm": variant.name,
         "arrived_tasks": arrivals,
         "completed_tasks": completions,
@@ -589,6 +819,14 @@ def simulate_run(
         "run_cost_index": float(np.mean(realized_objectives)) if realized_objectives else math.nan,
         "fairness": fairness,
         "rejection_rate_pct": 100.0 * len(rejected_tasks) / arrivals if arrivals else math.nan,
+        "network_failure_rate_pct": 100.0 * len(network_failed_tasks) / arrivals if arrivals else math.nan,
+        "mean_packet_loss_pct": 100.0 * float(np.mean(qos_loss_values)) if qos_loss_values else 0.0,
+        "mean_jitter_ms": 1000.0 * float(np.mean(qos_jitter_values)) if qos_jitter_values else 0.0,
+        "p95_jitter_ms": 1000.0 * float(np.percentile(qos_jitter_values, 95.0)) if qos_jitter_values else 0.0,
+        "retransmission_bytes": retransmission_bytes,
+        "retransmission_overhead_pct": 100.0 * retransmission_bytes / original_network_bytes if original_network_bytes else 0.0,
+        "retransmission_energy_j": retransmission_energy_j,
+        "sla_success_pct": 100.0 * (arrivals - misses) / arrivals if arrivals else math.nan,
         "local_pct": 100.0 * venue_counts["local"] / arrivals if arrivals else math.nan,
         "fog_pct": 100.0 * venue_counts["fog"] / arrivals if arrivals else math.nan,
         "cloud_pct": 100.0 * venue_counts["cloud"] / arrivals if arrivals else math.nan,
@@ -605,6 +843,7 @@ def simulate_run(
         {
             "seed": scenario.seed,
             "load": scenario.load,
+            "qos_regime": scenario.qos_regime,
             "algorithm": variant.name,
             "fog_node_id": name,
             "completed_tasks": count,
@@ -614,17 +853,39 @@ def simulate_run(
     prediction_rows: list[dict[str, Any]] = []
     if record_predictions:
         for index, (actual, predicted) in enumerate(zip(scenario.true_load, predicted_load)):
-            prediction_rows.append(
-                {
-                    "seed": scenario.seed,
-                    "load": scenario.load,
-                    "algorithm": variant.name,
-                    "segment_id": scenario.seed,
-                    "timestamp_s": index * config.telemetry_step_s,
-                    "y_true": float(actual),
-                    "y_pred": float(predicted),
-                }
-            )
+            row = {
+                "seed": scenario.seed,
+                "load": scenario.load,
+                "algorithm": variant.name,
+                "segment_id": scenario.seed,
+                "timestamp_s": index * config.telemetry_step_s,
+                "y_true": float(actual),
+                "y_pred": float(predicted),
+            }
+            if record_qos_predictions:
+                row.update({"qos_regime": scenario.qos_regime, "target": "load", "link_id": "system"})
+            prediction_rows.append(row)
+        if record_qos_predictions:
+            for target, actual_matrix, predicted_matrix in (
+                ("packet_loss", scenario.packet_loss, predicted_loss),
+                ("jitter_s", scenario.jitter_s, predicted_jitter),
+            ):
+                for index in range(actual_matrix.shape[0]):
+                    for link_index in range(actual_matrix.shape[1]):
+                        prediction_rows.append(
+                            {
+                                "seed": scenario.seed,
+                                "load": scenario.load,
+                                "algorithm": variant.name,
+                                "segment_id": scenario.seed,
+                                "timestamp_s": index * config.telemetry_step_s,
+                                "y_true": float(actual_matrix[index, link_index]),
+                                "y_pred": float(predicted_matrix[index, link_index]),
+                                "qos_regime": scenario.qos_regime,
+                                "target": target,
+                                "link_id": "cloud" if link_index == actual_matrix.shape[1] - 1 else f"fog-{link_index + 1}",
+                            }
+                        )
     return run, node_rows, task_records, prediction_rows
 
 
@@ -632,10 +893,17 @@ def _choose_venue(
     task: Task,
     venues: list[VenueState],
     variant: AlgorithmVariant,
+    *,
+    policy_model: Any | None = None,
+    decision_seed: int = 0,
 ) -> str | None:
     allowed = [venue for venue in venues if venue.kind in variant.allowed_kinds]
     if not allowed:
         return None
+    if variant.policy == "drl_oo":
+        if policy_model is None:
+            raise ValueError("DRL-OO scheduling requires a trained policy model")
+        return policy_model.select_venue(task, allowed, decision_seed=decision_seed)
     if variant.policy == "nearest_fog":
         return min(
             allowed,
@@ -683,6 +951,8 @@ def _build_venues(
     variant: AlgorithmVariant,
     *,
     actual: bool,
+    qos_loss: np.ndarray | None = None,
+    qos_jitter: np.ndarray | None = None,
 ) -> list[VenueState]:
     venues = [
         VenueState(
@@ -707,6 +977,8 @@ def _build_venues(
         downlink_bps = max(64_000_000.0 * congestion_factor / (1.0 + 0.04 * distance_km), 800_000.0)
         latency = (0.003 + 0.0007 * distance_km) * (1.0 + 2.8 * load_value - noise)
         mips = max(profile.base_mips * (1.0 - 0.68 * load_value), profile.base_mips * 0.20)
+        loss_rate = float(qos_loss[fog_index]) if qos_loss is not None else 0.0
+        jitter_value = float(qos_jitter[fog_index]) if qos_jitter is not None else 0.0
         venues.append(
             VenueState(
                 name=profile.name,
@@ -717,12 +989,22 @@ def _build_venues(
                 trust=profile.trust,
                 predicted_accuracy=profile.accuracy,
                 queue_work_mi=_queue_work(task, runtimes[profile.name], mips, variant),
-                link=LinkState(uplink_bps, downlink_bps, latency, latency),
+                link=LinkState(
+                    uplink_bps,
+                    downlink_bps,
+                    latency,
+                    latency,
+                    packet_loss_rate=loss_rate,
+                    jitter_s=jitter_value,
+                ),
             )
         )
     cloud_factor = max(0.18, 1.0 - 0.52 * load_value)
     cloud_mips = max(15_000.0 * (1.0 - 0.45 * load_value), 7000.0)
     cloud_latency = 0.038 * (1.0 + 1.9 * load_value)
+    cloud_index = len(scenario.fog_profiles)
+    cloud_loss = float(qos_loss[cloud_index]) if qos_loss is not None else 0.0
+    cloud_jitter = float(qos_jitter[cloud_index]) if qos_jitter is not None else 0.0
     venues.append(
         VenueState(
             name="cloud",
@@ -738,6 +1020,8 @@ def _build_venues(
                 150_000_000.0 * cloud_factor,
                 cloud_latency,
                 cloud_latency,
+                packet_loss_rate=cloud_loss,
+                jitter_s=cloud_jitter,
             ),
         )
     )
@@ -777,9 +1061,99 @@ def _queue_work(
 def _communication_times(task: Task, venue: VenueState) -> tuple[float, float, float]:
     if venue.kind == "local" or venue.link is None:
         return 0.0, 0.0, 0.0
-    uplink = 8.0 * task.uplink_bytes / venue.link.uplink_bps + venue.link.uplink_latency_s
-    downlink = 8.0 * task.downlink_bytes / venue.link.downlink_bps + venue.link.downlink_latency_s
+    factor = expected_retransmission_factor(
+        venue.link.packet_loss_rate, venue.link.max_retries
+    )
+    uplink = (
+        8.0 * task.uplink_bytes / venue.link.uplink_bps * factor
+        + venue.link.uplink_latency_s
+        + venue.link.jitter_s
+    )
+    downlink = (
+        8.0 * task.downlink_bytes / venue.link.downlink_bps * factor
+        + venue.link.downlink_latency_s
+        + venue.link.jitter_s
+    )
     return uplink + downlink, uplink, downlink
+
+
+def _realized_network_transfer(
+    task: Task,
+    venue: VenueState,
+    config: ExperimentConfig,
+    *,
+    scenario_seed: int,
+    task_order: int,
+) -> NetworkTransfer:
+    if venue.kind == "local" or venue.link is None:
+        return NetworkTransfer(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False)
+
+    link = venue.link
+    venue_code = 0 if venue.kind == "cloud" else int(venue.name.split("-")[-1])
+
+    def direction(
+        byte_count: float,
+        bps: float,
+        latency_s: float,
+        direction_code: int,
+    ) -> tuple[float, float, float, bool]:
+        if byte_count <= 0:
+            return latency_s, 0.0, 0.0, False
+        sequence = np.random.SeedSequence(
+            [scenario_seed, task_order, venue_code, direction_code, 91_337]
+        )
+        rng = np.random.default_rng(sequence)
+        packet_count = max(int(math.ceil(byte_count / config.packet_payload_bytes)), 1)
+        outstanding = packet_count
+        transmitted_packets = packet_count
+        retry_rounds = 0
+        failed = False
+        for attempt in range(link.max_retries + 1):
+            lost = int(rng.binomial(outstanding, link.packet_loss_rate))
+            if lost == 0:
+                break
+            if attempt == link.max_retries:
+                failed = True
+                break
+            outstanding = lost
+            transmitted_packets += lost
+            retry_rounds += 1
+        retransmission_bytes = max(transmitted_packets - packet_count, 0) * config.packet_payload_bytes
+        serialization_s = 8.0 * (byte_count + retransmission_bytes) / bps
+        sampled_jitter = (
+            float(rng.gamma(shape=2.0, scale=link.jitter_s / 2.0))
+            if link.jitter_s > 0.0
+            else 0.0
+        )
+        elapsed_s = (
+            serialization_s
+            + latency_s
+            + sampled_jitter
+            + retry_rounds * (latency_s + sampled_jitter)
+        )
+        return elapsed_s, serialization_s, sampled_jitter, failed
+
+    uplink_s, uplink_serialization_s, uplink_jitter, uplink_failed = direction(
+        task.uplink_bytes, link.uplink_bps, link.uplink_latency_s, 1
+    )
+    downlink_s, downlink_serialization_s, downlink_jitter, downlink_failed = direction(
+        task.downlink_bytes, link.downlink_bps, link.downlink_latency_s, 2
+    )
+    base_bytes = task.uplink_bytes + task.downlink_bytes
+    transmitted_bytes = (
+        uplink_serialization_s * link.uplink_bps / 8.0
+        + downlink_serialization_s * link.downlink_bps / 8.0
+    )
+    return NetworkTransfer(
+        communication_s=uplink_s + downlink_s,
+        uplink_s=uplink_s,
+        downlink_s=downlink_s,
+        uplink_serialization_s=uplink_serialization_s,
+        downlink_serialization_s=downlink_serialization_s,
+        jitter_s=uplink_jitter + downlink_jitter,
+        retransmission_bytes=max(transmitted_bytes - base_bytes, 0.0),
+        failed=uplink_failed or downlink_failed,
+    )
 
 
 def _task_record(
@@ -792,10 +1166,22 @@ def _task_record(
     rejected: bool,
     energy_j: float,
     monetary_cost: float,
+    *,
+    network_failed: bool = False,
+    transfer: NetworkTransfer | None = None,
+    packet_loss_rate: float = 0.0,
+    jitter_s: float = 0.0,
+    retransmission_bytes: float = 0.0,
 ) -> dict[str, Any]:
+    if transfer is not None:
+        jitter_s = transfer.jitter_s
+        retransmission_bytes = transfer.retransmission_bytes
+        if venue is not None and venue.link is not None:
+            packet_loss_rate = venue.link.packet_loss_rate
     return {
         "seed": scenario.seed,
         "load": scenario.load,
+        "qos_regime": scenario.qos_regime,
         "algorithm": variant.name,
         "task_id": task.task_id,
         "arrival_s": task.arrival_s,
@@ -803,10 +1189,14 @@ def _task_record(
         "relative_deadline_s": task.relative_deadline_s,
         "missed": int(missed),
         "rejected": int(rejected),
+        "network_failed": int(network_failed),
         "energy_j": energy_j,
         "monetary_cost": monetary_cost,
         "selected_venue": venue.name if venue is not None else "",
         "venue_kind": venue.kind if venue is not None else "rejected",
+        "packet_loss_rate": packet_loss_rate,
+        "jitter_ms": 1000.0 * jitter_s,
+        "retransmission_bytes": retransmission_bytes,
     }
 
 

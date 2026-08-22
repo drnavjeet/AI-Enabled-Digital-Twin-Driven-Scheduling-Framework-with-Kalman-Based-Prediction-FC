@@ -1,0 +1,21 @@
+{
+  "policy_seed": 503,
+  "config": {
+    "implementation_version": 2,
+    "hidden_units": 256,
+    "candidate_actions": 100,
+    "top_actions": 10,
+    "learning_rate": 0.0005,
+    "discount_factor": 0.99,
+    "batch_size": 32,
+    "soft_update": 0.005,
+    "target_update_interval": 3,
+    "replay_capacity": 60000,
+    "episodes": 200,
+    "tasks_per_episode": 64,
+    "updates_per_episode": 2
+  },
+  "method": "Paper-aligned discrete DRL-OO adaptation with simulator replay and target-critic bootstrapping",
+  "source_article": "https://link.springer.com/article/10.1186/s13638-025-02534-0",
+  "adaptation_note": "The paper server-plus-VM action is adapted to the common venue-selection action space used by every scheduler in this simulator."
+}

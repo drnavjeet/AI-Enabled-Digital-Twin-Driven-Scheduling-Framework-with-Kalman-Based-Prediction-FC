@@ -24,6 +24,10 @@ It does **not** claim to reproduce the paper's exact Tables IV/V or XI/XII. The 
 - `validate_independent_results.py`: independent reconciliation of reported KPIs against raw task, node, and prediction records.
 - `results/independent_experiment/`: complete rerun outputs, including compressed raw records and publication-ready LaTeX tables.
 - `results/excel/`: verified Excel workbooks for the complete results, per-seed records, and aligned raw predictions.
+- `drl_oo.py`: self-contained NumPy actor/critic implementation of the paper-aligned 2025 DRL-OO baseline, including replay learning, target networks, and ordinal candidate filtering.
+- `run_qos_revision.py`: packet-loss/jitter main comparison, QoS ablation, sensitivity, DRL training, and revised scalability runner.
+- `validate_qos_revision.py`: row-count, task-level KPI, retransmission, pairing, policy-file, and sensitivity reconciliation for the revised experiment.
+- `results/qos_revision/`: complete 30-seed QoS/AI results, frozen policies, compressed raw evidence, reviewer text, LaTeX, and the verified Excel workbook.
 
 ## Run
 
@@ -35,11 +39,45 @@ $python = 'C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencie
 & $python recompute.py
 & $python run_independent_experiments.py
 & $python validate_independent_results.py
+& $python run_qos_revision.py
+& $python validate_qos_revision.py
 ```
 
 For a quick pipeline smoke test, use `run_independent_experiments.py --quick`. The
 full command runs 1,200 algorithm-seed scenarios and writes checkpoints as each
 experiment family completes.
+
+For a development-only QoS/AI smoke run, use `run_qos_revision.py --quick` with a
+separate output directory. The full revised command trains five independently
+seeded DRL-OO policies, freezes them before measurement, and runs 1,350 main,
+80 ablation, 200 sensitivity, and 200 scalability evaluations.
+
+## Packet loss, jitter, and recent AI baseline
+
+The revised simulator adds time-varying packet loss and jitter, packetized
+retry-capped retransmissions, retry delay and energy, transport failure, and
+strictly one-step-ahead QoS prediction. All algorithms experience the same seeded
+network traces. The available source datasets contain no aligned loss/jitter
+measurements, so the clean, moderate, and impaired QoS regimes are explicitly
+documented synthetic assumptions rather than empirical trace claims.
+
+The recent AI comparator is a paper-aligned discrete-action adaptation of Wang and
+Sun's 2025 DRL scheduler with ordinal optimization:
+`https://link.springer.com/article/10.1186/s13638-025-02534-0`. It is labelled as an
+adaptation, not an exact reproduction, because the source paper does not publish
+code or training data and uses a server-plus-VM action space.
+
+The principal outputs are:
+
+- `results/qos_revision/qos_revision_report.md`
+- `results/qos_revision/qos_revision_tables.tex`
+- `results/qos_revision/reviewer_response_additions.md`
+- `results/qos_revision/excel/complete_qos_ai_results.xlsx`
+- `results/qos_revision/validation_result.json`
+
+The Excel workbook contains all manageable raw/run-level and summarized result
+tables. The 1,334,685 task records and 1,784,160 aligned prediction records exceed
+Excel's per-sheet row limit and therefore remain as checksum-documented gzip CSVs.
 
 ## Independent rerun
 

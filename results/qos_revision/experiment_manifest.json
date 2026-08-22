@@ -1,0 +1,210 @@
+{
+  "generated_at_utc": "2026-08-22T14:52:25.708346+00:00",
+  "status": "full_reviewer_revision_run",
+  "provenance": "New trace-backed simulator experiment with explicitly synthetic packet-loss and jitter regimes; not a reconstruction of undocumented manuscript values.",
+  "data_root": "C:\\Users\\Dell\\Documents\\Codex\\2026-08-16\\im\\work\\data_sources",
+  "config": {
+    "warmup_s": 20.0,
+    "measurement_s": 90.0,
+    "telemetry_step_s": 1.0,
+    "main_seeds": 30,
+    "secondary_seeds": 20,
+    "scalability_seeds": 10,
+    "fog_nodes": 8,
+    "arrival_rates": [
+      [
+        "low",
+        5.0
+      ],
+      [
+        "medium",
+        10.0
+      ],
+      [
+        "high",
+        18.0
+      ]
+    ],
+    "load_centers": [
+      [
+        "low",
+        0.25
+      ],
+      [
+        "medium",
+        0.5
+      ],
+      [
+        "high",
+        0.75
+      ]
+    ],
+    "kalman_q": 0.001,
+    "kalman_r": 0.01,
+    "ema_alpha": 0.12,
+    "mape_epsilon": 1e-06,
+    "packet_payload_bytes": 1460,
+    "max_network_retries": 3
+  },
+  "qos_regimes": {
+    "clean": {
+      "base_packet_loss": 0.001,
+      "base_jitter_s": 0.0015
+    },
+    "moderate": {
+      "base_packet_loss": 0.015,
+      "base_jitter_s": 0.008
+    },
+    "impaired": {
+      "base_packet_loss": 0.05,
+      "base_jitter_s": 0.025
+    }
+  },
+  "algorithms": [
+    {
+      "name": "DT-KF-CostAware",
+      "predictor": "kalman",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.3,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "qos_aware": true,
+      "loss_aware": true,
+      "jitter_aware": true
+    },
+    {
+      "name": "DT-OPT",
+      "predictor": "ema",
+      "policy": "cost",
+      "use_dt_state": true,
+      "use_lhs": true,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.3,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "qos_aware": true,
+      "loss_aware": true,
+      "jitter_aware": true
+    },
+    {
+      "name": "SemiGreedy",
+      "predictor": "last",
+      "policy": "latency",
+      "use_dt_state": true,
+      "use_lhs": false,
+      "admission": false,
+      "queue_mode": "fcfs",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "qos_aware": false,
+      "loss_aware": true,
+      "jitter_aware": true
+    },
+    {
+      "name": "Fog-only",
+      "predictor": "mean",
+      "policy": "nearest_fog",
+      "use_dt_state": true,
+      "use_lhs": false,
+      "admission": false,
+      "queue_mode": "fcfs",
+      "allowed_kinds": [
+        "fog"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "qos_aware": false,
+      "loss_aware": true,
+      "jitter_aware": true
+    },
+    {
+      "name": "DRL-OO-2025",
+      "predictor": "last",
+      "policy": "drl_oo",
+      "use_dt_state": true,
+      "use_lhs": false,
+      "admission": true,
+      "queue_mode": "edf",
+      "allowed_kinds": [
+        "local",
+        "fog",
+        "cloud"
+      ],
+      "refresh_interval": 1,
+      "price_multiplier": 1.0,
+      "minimum_lhs": 0.67,
+      "weights": [
+        0.4,
+        0.2,
+        0.2,
+        0.2
+      ],
+      "qos_aware": true,
+      "loss_aware": true,
+      "jitter_aware": true
+    }
+  ],
+  "drl_oo": {
+    "policy_seeds": [
+      501,
+      502,
+      503,
+      504,
+      505
+    ],
+    "source": "https://link.springer.com/article/10.1186/s13638-025-02534-0",
+    "claim": "paper-aligned discrete-action adaptation, not an exact reproduction"
+  },
+  "metric_definitions": {
+    "network_failure_rate_pct": "100 * retry-exhausted task flows / measured arrivals",
+    "retransmission_overhead_pct": "100 * retransmitted payload bytes / original remote payload bytes",
+    "sla_success_pct": "100 * tasks neither rejected, retry-exhausted, nor completed after deadline / arrivals",
+    "packet_loss_model": "independent packet loss with 1460-byte payload and at most three retries"
+  }
+}

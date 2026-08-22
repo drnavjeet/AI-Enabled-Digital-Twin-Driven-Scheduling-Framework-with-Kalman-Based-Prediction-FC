@@ -4,3 +4,6 @@ __pycache__/
 .coverage
 .venv/
 venv/
+results/qos_revision_quick*/
+results/qos_revision/excel_build/
+*.inspect.ndjson
