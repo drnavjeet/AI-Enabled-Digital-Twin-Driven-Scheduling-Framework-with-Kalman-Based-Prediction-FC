@@ -24,7 +24,7 @@ It does **not** claim to reproduce the paper's exact Tables IV/V or XI/XII. The 
 - `validate_independent_results.py`: independent reconciliation of reported KPIs against raw task, node, and prediction records.
 - `results/independent_experiment/`: complete rerun outputs, including compressed raw records and publication-ready LaTeX tables.
 - `results/excel/`: verified Excel workbooks for the complete results, per-seed records, and aligned raw predictions.
-- `drl_oo.py`: self-contained NumPy actor/critic implementation of the paper-aligned 2025 DRL-OO baseline, including replay learning, target networks, and ordinal candidate filtering.
+- `drl_oo.py`: self-contained NumPy actor/critic implementation of the paper-aligned DRL-OO baseline, including replay learning, target networks, and ordinal candidate filtering.
 - `run_qos_revision.py`: packet-loss/jitter main comparison, QoS ablation, sensitivity, DRL training, and revised scalability runner.
 - `validate_qos_revision.py`: row-count, task-level KPI, retransmission, pairing, policy-file, and sensitivity reconciliation for the revised experiment.
 - `results/qos_revision/`: complete 30-seed QoS/AI results, frozen policies, compressed raw evidence, reviewer text, LaTeX, and the verified Excel workbook.
@@ -39,6 +39,7 @@ $python = 'C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencie
 & $python recompute.py
 & $python run_independent_experiments.py
 & $python validate_independent_results.py
+& $python calibrate_costaware.py
 & $python run_qos_revision.py
 & $python validate_qos_revision.py
 ```
@@ -60,6 +61,15 @@ strictly one-step-ahead QoS prediction. All algorithms experience the same seede
 network traces. The available source datasets contain no aligned loss/jitter
 measurements, so the clean, moderate, and impaired QoS regimes are explicitly
 documented synthetic assumptions rather than empirical trace claims.
+
+DT-KF-CostAware retains all four cost-objective terms with weights
+`0.48/0.20/0.16/0.16`, adds a convex deadline-risk component, and balances
+assignments among near-optimal fog candidates. `calibrate_costaware.py` compares
+the predefined alternatives on seeds `40000-40007`, which are separate from the
+final evaluation seeds `10000-10029`; the selected configuration is then frozen.
+The reported `run_cost_index` uses each variant's own configured weights, so it
+is a within-variant diagnostic rather than a cross-algorithm ranking after this
+recalibration.
 
 The recent AI comparator is a paper-aligned discrete-action adaptation of Wang and
 Sun's 2025 DRL scheduler with ordinal optimization:

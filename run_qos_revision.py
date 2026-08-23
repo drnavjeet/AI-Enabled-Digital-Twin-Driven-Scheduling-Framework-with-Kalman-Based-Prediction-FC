@@ -190,9 +190,7 @@ def run_main(
 
 
 def qos_ablation_variants() -> tuple[AlgorithmVariant, ...]:
-    full = AlgorithmVariant(
-        "Full-QoS", "kalman", "cost", qos_aware=True, minimum_lhs=0.30
-    )
+    full = replace(qos_algorithms()[0], name="Full-QoS")
     return (
         full,
         replace(full, name="No-QoS-awareness", qos_aware=False),
@@ -220,7 +218,7 @@ def run_sensitivity(data: Any, config: ExperimentConfig) -> list[dict[str, Any]]
     ] + [
         ("jitter", 0.015, jitter) for jitter in (0.0, 0.005, 0.015, 0.030, 0.050)
     ]
-    variant = AlgorithmVariant("DT-KF-CostAware", "kalman", "cost", qos_aware=True)
+    variant = qos_algorithms()[0]
     runs: list[dict[str, Any]] = []
     for sensitivity_type, loss_rate, jitter_s in settings:
         for seed_index in range(config.secondary_seeds):
@@ -320,6 +318,8 @@ def render_report(
         "",
         "These are new paired simulator results, not reconstructed manuscript values. Packet loss and jitter use documented synthetic regimes because the available datasets contain no aligned QoS traces.",
         "",
+        "DT-KF-CostAware uses weights 0.48/0.20/0.16/0.16 for latency/energy/cost/accuracy, a 0.25 deadline-risk blend, and near-optimal fog balancing. These settings were selected on independent calibration seeds 40000-40007 before the final seeds 10000-10029 were evaluated.",
+        "",
         "## Main results",
         "",
         "| QoS | Load | Algorithm | Mean latency (ms) | DMR (%) | Throughput | Energy (J) | Network failure (%) | Retransmission (%) | SLA success (%) |",
@@ -328,10 +328,10 @@ def render_report(
     for row in main_summary:
         lines.append(
             f"| {row['qos_regime']} | {row['load']} | {row['algorithm']} | "
-            f"{row['mean_latency_ms_mean']:.2f} +/- {row['mean_latency_ms_ci95']:.2f} | "
-            f"{row['dmr_pct_mean']:.2f} | {row['throughput_tasks_s_mean']:.2f} | "
-            f"{row['energy_j_mean']:.2f} | {row['network_failure_rate_pct_mean']:.3f} | "
-            f"{row['retransmission_overhead_pct_mean']:.2f} | {row['sla_success_pct_mean']:.2f} |"
+            f"{float(row['mean_latency_ms_mean']):.2f} +/- {float(row['mean_latency_ms_ci95']):.2f} | "
+            f"{float(row['dmr_pct_mean']):.2f} | {float(row['throughput_tasks_s_mean']):.2f} | "
+            f"{float(row['energy_j_mean']):.2f} | {float(row['network_failure_rate_pct_mean']):.3f} | "
+            f"{float(row['retransmission_overhead_pct_mean']):.2f} | {float(row['sla_success_pct_mean']):.2f} |"
         )
     significant = sum(float(row["holm_p"]) < 0.05 for row in paired)
     lines.extend(
@@ -349,8 +349,8 @@ def render_report(
     )
     for row in ablation_summary:
         lines.append(
-            f"| {row['algorithm']} | {row['mean_latency_ms_mean']:.2f} | {row['dmr_pct_mean']:.2f} | "
-            f"{row['throughput_tasks_s_mean']:.2f} | {row['energy_j_mean']:.2f} | {row['sla_success_pct_mean']:.2f} |"
+            f"| {row['algorithm']} | {float(row['mean_latency_ms_mean']):.2f} | {float(row['dmr_pct_mean']):.2f} | "
+            f"{float(row['throughput_tasks_s_mean']):.2f} | {float(row['energy_j_mean']):.2f} | {float(row['sla_success_pct_mean']):.2f} |"
         )
     lines.extend(
         [
@@ -362,6 +362,8 @@ def render_report(
             "## Interpretation guardrail",
             "",
             "The DRL-OO result is a paper-aligned discrete-action adaptation evaluated in the common venue-selection action space. It is not claimed as a bit-for-bit reproduction of the source paper, whose code and training data were not published.",
+            "",
+            "The run_cost_index uses each scheduler variant's configured objective weights. Because DT-KF-CostAware was recalibrated to 0.48/0.20/0.16/0.16, that index is retained for within-variant diagnostics but is not interpreted as a cross-algorithm ranking metric.",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -384,9 +386,9 @@ def render_latex(main_summary: list[dict[str, Any]]) -> str:
             continue
         algorithm = str(row["algorithm"]).replace("_", "\\_")
         rows.append(
-            f"{row['load']} & {algorithm} & {row['mean_latency_ms_mean']:.2f} $\\pm$ {row['mean_latency_ms_ci95']:.2f} & "
-            f"{row['dmr_pct_mean']:.2f} & {row['throughput_tasks_s_mean']:.2f} & "
-            f"{row['energy_j_mean']:.2f} & {row['sla_success_pct_mean']:.2f} \\\\"
+            f"{row['load']} & {algorithm} & {float(row['mean_latency_ms_mean']):.2f} $\\pm$ {float(row['mean_latency_ms_ci95']):.2f} & "
+            f"{float(row['dmr_pct_mean']):.2f} & {float(row['throughput_tasks_s_mean']):.2f} & "
+            f"{float(row['energy_j_mean']):.2f} & {float(row['sla_success_pct_mean']):.2f} \\\\"
         )
     rows.extend(["\\bottomrule", "\\end{tabular}", "\\end{table*}"])
     return "\n".join(rows) + "\n"
@@ -402,6 +404,8 @@ We agree that the original network model did not explicitly represent packet los
 ## Comment 17: recent AI scheduler
 
 We agree that the original baselines did not include a sufficiently recent learning scheduler. We added a paper-aligned adaptation of Wang and Sun's 2025 DRL scheduler with ordinal optimization (EURASIP Journal on Wireless Communications and Networking, DOI: 10.1186/s13638-025-02534-0). The implementation uses actor and critic networks, replay learning, target-network soft updates, binary action perturbations, 100 ordinal candidates, and critic top-10 filtering. Five independently seeded policies are trained only on training scenarios, frozen, and assigned evenly across the 30 paired evaluation seeds. Since the source article does not publish code or training data and our common simulator exposes venue selection rather than server-plus-VM allocation, we label this a paper-aligned discrete-action adaptation rather than an exact reproduction.
+
+The proposed scheduler is reported as DT-KF-CostAware and the comparator as DRL-OO. To improve deadline behavior without discarding the cost-aware design, DT-KF-CostAware retains nonzero latency, energy, cost, and accuracy weights (0.48/0.20/0.16/0.16), adds a convex deadline-risk term, and balances assignments among fog candidates whose objective and predicted latency are close to the best candidate. The settings were selected using independent calibration seeds 40000-40007 and then frozen before evaluation on seeds 10000-10029.
 """
     (output_dir / "reviewer_response_additions.md").write_text(text, encoding="utf-8")
 

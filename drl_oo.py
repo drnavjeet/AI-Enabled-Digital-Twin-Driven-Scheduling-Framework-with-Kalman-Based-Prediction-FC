@@ -340,7 +340,7 @@ def train_policy(
     rng = np.random.default_rng(policy_seed + 700_001)
     training_config = replace(experiment_config, warmup_s=2.0, measurement_s=8.0)
     variant = AlgorithmVariant(
-        "DRL-OO-2025", "last", "drl_oo", qos_aware=True, use_lhs=False
+        "DRL-OO", "last", "drl_oo", qos_aware=True, use_lhs=False
     )
     log: list[dict[str, float]] = []
     loads = ("low", "medium", "high")

@@ -103,6 +103,51 @@ class SchedulerTests(unittest.TestCase):
         evaluation = decision.evaluations[0]
         self.assertAlmostEqual(evaluation.communication_s, 1.0)
 
+    def test_deadline_risk_can_prefer_faster_feasible_venue(self) -> None:
+        task = Task("urgent", 0.0, 0.5, 400.0, 0.0, 0.0)
+        zero_delay = LinkState(10_000_000, 10_000_000, 0.0, 0.0)
+        venues = [
+            VenueState("fast", "fog", 5000, 1e-10, 0.0, 1.0, 1.0, link=zero_delay),
+            VenueState("slow", "fog", 1000, 2.5e-10, 0.0, 1.0, 1.0, link=zero_delay),
+        ]
+        base = SchedulerConfig(
+            latency_weight=0.5,
+            energy_weight=0.5,
+            cost_weight=0.0,
+            accuracy_weight=0.0,
+            minimum_lhs=0.0,
+        )
+        risk_aware = SchedulerConfig(
+            latency_weight=0.5,
+            energy_weight=0.5,
+            cost_weight=0.0,
+            accuracy_weight=0.0,
+            minimum_lhs=0.0,
+            deadline_risk_blend=0.6,
+        )
+        self.assertEqual(select_venue(task, venues, base).selected_venue, "slow")
+        self.assertEqual(select_venue(task, venues, risk_aware).selected_venue, "fast")
+
+    def test_near_optimal_fog_choice_balances_prior_assignments(self) -> None:
+        task = Task("balance", 0.0, 1.0, 100.0, 0.0, 0.0)
+        link = LinkState(10_000_000, 10_000_000, 0.0, 0.0)
+        venues = [
+            VenueState(
+                "fog-a", "fog", 5000, 1e-12, 0.0, 1.0, 1.0,
+                link=link, prior_assignments=10,
+            ),
+            VenueState(
+                "fog-b", "fog", 5000, 1e-12, 0.0, 1.0, 1.0,
+                link=link, prior_assignments=1,
+            ),
+        ]
+        config = SchedulerConfig(
+            minimum_lhs=0.0,
+            balance_score_tolerance=0.01,
+            balance_latency_tolerance=0.01,
+        )
+        self.assertEqual(select_venue(task, venues, config).selected_venue, "fog-b")
+
 
 class ResultAuditTests(unittest.TestCase):
     def test_point_estimate_comparisons_are_complete(self) -> None:

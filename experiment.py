@@ -79,6 +79,9 @@ class AlgorithmVariant:
     qos_aware: bool = False
     loss_aware: bool = True
     jitter_aware: bool = True
+    deadline_risk_blend: float = 0.0
+    balance_score_tolerance: float = 0.0
+    balance_latency_tolerance: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -273,7 +276,16 @@ def _robust_unit_scale(values: np.ndarray) -> np.ndarray:
 
 def main_algorithms() -> tuple[AlgorithmVariant, ...]:
     return (
-        AlgorithmVariant("DT-KF-CostAware", "kalman", "cost", qos_aware=True),
+        AlgorithmVariant(
+            "DT-KF-CostAware",
+            "kalman",
+            "cost",
+            weights=(0.48, 0.20, 0.16, 0.16),
+            qos_aware=True,
+            deadline_risk_blend=0.25,
+            balance_score_tolerance=0.05,
+            balance_latency_tolerance=0.12,
+        ),
         AlgorithmVariant("DT-OPT", "ema", "cost", qos_aware=True),
         AlgorithmVariant(
             "SemiGreedy",
@@ -304,7 +316,7 @@ def qos_algorithms() -> tuple[AlgorithmVariant, ...]:
     )
     return revised + (
         AlgorithmVariant(
-            "DRL-OO-2025",
+            "DRL-OO",
             "last",
             "drl_oo",
             use_dt_state=True,
@@ -566,6 +578,7 @@ def simulate_run(
         predicted_jitter = np.zeros_like(scenario.jitter_s)
     runtimes: dict[str, NodeRuntime] = {"local": NodeRuntime(), "cloud": NodeRuntime()}
     runtimes.update({profile.name: NodeRuntime() for profile in scenario.fog_profiles})
+    fog_assignments = {profile.name: 0 for profile in scenario.fog_profiles}
     scheduled_jobs: list[ScheduledJob] = []
     rejected_tasks: list[Task] = []
     network_failed_tasks: list[tuple[Task, VenueState, NetworkTransfer]] = []
@@ -595,6 +608,7 @@ def simulate_run(
             estimate,
             variant,
             actual=False,
+            fog_assignments=fog_assignments,
             qos_loss=predicted_loss[telemetry_index],
             qos_jitter=predicted_jitter[telemetry_index],
         )
@@ -622,6 +636,7 @@ def simulate_run(
             current_load,
             variant,
             actual=True,
+            fog_assignments=fog_assignments,
             qos_loss=scenario.packet_loss[telemetry_index],
             qos_jitter=scenario.jitter_s[telemetry_index],
         )
@@ -665,6 +680,8 @@ def simulate_run(
             task.arrival_s,
             "edf" if variant.queue_mode == "edf" else "fcfs",
         )
+        if actual.kind == "fog":
+            fog_assignments[actual.name] += 1
         scheduled_jobs.append(job)
 
     wall_s = max(time.perf_counter() - wall_start, 1e-9)
@@ -936,6 +953,9 @@ def _choose_venue(
         reference_downlink_bps=50_000_000.0,
         reference_uplink_latency_s=0.060,
         reference_downlink_latency_s=0.060,
+        deadline_risk_blend=variant.deadline_risk_blend,
+        balance_score_tolerance=variant.balance_score_tolerance,
+        balance_latency_tolerance=variant.balance_latency_tolerance,
     )
     decision = select_venue(effective_task, allowed, scheduler_config)
     return decision.selected_venue
@@ -951,6 +971,7 @@ def _build_venues(
     variant: AlgorithmVariant,
     *,
     actual: bool,
+    fog_assignments: dict[str, int] | None = None,
     qos_loss: np.ndarray | None = None,
     qos_jitter: np.ndarray | None = None,
 ) -> list[VenueState]:
@@ -997,6 +1018,7 @@ def _build_venues(
                     packet_loss_rate=loss_rate,
                     jitter_s=jitter_value,
                 ),
+                prior_assignments=(fog_assignments or {}).get(profile.name, 0),
             )
         )
     cloud_factor = max(0.18, 1.0 - 0.52 * load_value)

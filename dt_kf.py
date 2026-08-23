@@ -51,6 +51,7 @@ class VenueState:
     queue_work_mi: tuple[tuple[float, float], ...] = field(default_factory=tuple)
     link: LinkState | None = None
     battery_fraction: float = 1.0
+    prior_assignments: int = 0
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,9 @@ class SchedulerConfig:
     maximum_jitter_s: float = 0.100
     device_tx_power_w: float = 1.3
     device_rx_power_w: float = 0.9
+    deadline_risk_blend: float = 0.0
+    balance_score_tolerance: float = 0.0
+    balance_latency_tolerance: float = 0.0
 
     def __post_init__(self) -> None:
         weights = (
@@ -84,6 +88,12 @@ class SchedulerConfig:
             raise ValueError("Objective weights must be non-negative")
         if not np.isclose(sum(weights), 1.0):
             raise ValueError("Objective weights must sum to one")
+        if not 0.0 <= self.deadline_risk_blend <= 1.0:
+            raise ValueError("Deadline-risk blend must be in [0, 1]")
+        if self.balance_score_tolerance < 0.0:
+            raise ValueError("Balance-score tolerance must be non-negative")
+        if self.balance_latency_tolerance < 0.0:
+            raise ValueError("Balance-latency tolerance must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -101,6 +111,7 @@ class CandidateEvaluation:
     monetary_cost: float
     accuracy: float
     lhs: float | None
+    prior_assignments: int
     objective: float | None = None
 
 
@@ -291,6 +302,7 @@ def _evaluate_candidate(
         monetary_cost=monetary_cost,
         accuracy=venue.predicted_accuracy,
         lhs=lhs,
+        prior_assignments=venue.prior_assignments,
     )
 
 
@@ -318,8 +330,19 @@ def select_venue(
             scored.append(item)
             continue
         normalized_accuracy = item.accuracy / max_accuracy if task.inference else 1.0
+        normalized_latency = item.latency_s / max_latency
+        deadline_ratio = min(
+            item.latency_s / max(task.relative_deadline_s, 1e-9), 1.0
+        )
+        deadline_risk = min(
+            deadline_ratio**2 / max(1.0 - deadline_ratio, 0.05), 1.0
+        )
+        latency_risk = (
+            (1.0 - config.deadline_risk_blend) * normalized_latency
+            + config.deadline_risk_blend * deadline_risk
+        )
         objective = (
-            config.latency_weight * item.latency_s / max_latency
+            config.latency_weight * latency_risk
             + config.energy_weight * item.system_energy_j / max_energy
             + config.cost_weight * item.monetary_cost / max_cost
             + config.accuracy_weight * (1.0 - normalized_accuracy)
@@ -330,4 +353,22 @@ def select_venue(
 
     eligible = [item for item in scored if item.feasible and item.objective is not None]
     selected = min(eligible, key=lambda item: (item.objective, item.latency_s, item.venue))
+    if selected.kind == "fog" and config.balance_score_tolerance > 0.0:
+        balanced = [
+            item
+            for item in eligible
+            if item.kind == "fog"
+            and item.objective <= selected.objective + config.balance_score_tolerance
+            and item.latency_s
+            <= selected.latency_s * (1.0 + config.balance_latency_tolerance)
+        ]
+        selected = min(
+            balanced,
+            key=lambda item: (
+                item.prior_assignments,
+                item.objective,
+                item.latency_s,
+                item.venue,
+            ),
+        )
     return Decision(task.task_id, selected.venue, False, tuple(scored))
